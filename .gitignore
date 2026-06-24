@@ -1,0 +1,21 @@
+# Claude
+.claude/
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Dependencias futuras
+vendor/
+node_modules/
+
+# Variables de entorno
+.env
+.env.*
