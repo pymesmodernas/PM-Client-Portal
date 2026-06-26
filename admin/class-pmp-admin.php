@@ -25,6 +25,8 @@ class PMP_Admin {
         add_action( 'admin_init',            [ $this, 'register_settings'] );
         add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_assets'   ] );
         add_action( 'admin_notices',         [ $this, 'notice_not_connected' ] );
+        add_action( 'load-index.php',        [ $this, 'redirect_to_resumen'  ] );
+        add_filter( 'show_admin_bar',        [ $this, 'maybe_hide_admin_bar' ] );
 
         add_action( 'wp_ajax_pmp_test_connection',    [ $this, 'ajax_test_connection'    ] );
         add_action( 'wp_ajax_pmp_create_portal_page', [ $this, 'ajax_create_portal_page' ] );
@@ -44,6 +46,27 @@ class PMP_Admin {
         add_action( 'wp_ajax_pmp_dashboard_klaviyo',    [ $this, 'ajax_dashboard_klaviyo'    ] );
         add_action( 'wp_ajax_pmp_test_klaviyo',         [ $this, 'ajax_test_klaviyo'         ] );
         add_action( 'wp_ajax_pmp_dismiss_connect_notice', [ $this, 'ajax_dismiss_connect_notice' ] );
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * Resumen como nuevo escritorio de WordPress
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    /** Redirige el Escritorio clásico de WordPress al panel Resumen (solo admins) */
+    public function redirect_to_resumen(): void {
+        if ( ! current_user_can( 'manage_options' ) || ! PMP_WooCommerce::is_active() ) {
+            return;
+        }
+        wp_safe_redirect( admin_url( 'admin.php?page=' . self::DASHBOARD_SLUG ) );
+        exit;
+    }
+
+    /** Oculta la barra superior negra de WordPress únicamente en el panel Resumen */
+    public function maybe_hide_admin_bar( bool $show ): bool {
+        if ( isset( $_GET['page'] ) && $_GET['page'] === self::DASHBOARD_SLUG ) {
+            return false;
+        }
+        return $show;
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -159,19 +182,13 @@ class PMP_Admin {
      * ───────────────────────────────────────────────────────────────────────── */
 
     public function register_menus() {
-        // Icono SVG en base64 — gráfica de barras con colores PM
-        $icon = 'data:image/svg+xml;base64,' . base64_encode(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="#a7aaad">'
-            . '<rect x="1"  y="10" width="4" height="9" rx="1"/>'
-            . '<rect x="8"  y="5"  width="4" height="14" rx="1"/>'
-            . '<rect x="15" y="1"  width="4" height="18" rx="1"/>'
-            . '</svg>'
-        );
+        // Logo de Pymes Modernas (recoloreado a blanco para el menú oscuro de WP)
+        $icon = PMP_PLUGIN_URL . 'assets/img/pymesmodernas-icon.svg';
 
         // Menú principal → renderiza el portal
         add_menu_page(
             'Pymes Modernas',
-            'Pymes Modernas',
+            'pymesmodernas',
             'read',                     // cualquier usuario logueado puede ver su portal
             self::MENU_SLUG,
             [ $this, 'page_portal'     ],
@@ -988,10 +1005,29 @@ class PMP_Admin {
             return;
         }
 
-        $news_url   = esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG . '&pmp_tab=news' ) );
-        $orders_url = esc_url( admin_url( 'edit.php?post_type=shop_order' ) );
+        $news_url     = esc_url( admin_url( 'admin.php?page=' . self::MENU_SLUG . '&pmp_tab=news' ) );
+        $orders_url   = esc_url( admin_url( 'edit.php?post_type=shop_order' ) );
+        $user         = wp_get_current_user();
+        $first_name   = $user->first_name ?: $user->display_name;
+        $hour         = (int) current_time( 'H' );
+        $greeting     = $hour < 12 ? 'Buenos días' : ( $hour < 19 ? 'Buenas tardes' : 'Buenas noches' );
+        $today_str    = date_i18n( 'l j \d\e F' );
         ?>
         <div class="wrap pmpd-wrap" id="pmpd-dashboard">
+
+            <!-- Banner de bienvenida con marca Pymes Modernas -->
+            <div class="pmpd-welcome-banner">
+                <div class="pmpd-welcome-text">
+                    <span class="pmpd-welcome-brand">pymesmodernas</span>
+                    <h1 class="pmpd-welcome-title"><?= esc_html( $greeting ) ?>, <?= esc_html( $first_name ) ?> 👋</h1>
+                    <span class="pmpd-welcome-date"><?= esc_html( ucfirst( $today_str ) ) ?> · <?= esc_html( get_bloginfo( 'name' ) ) ?></span>
+                </div>
+                <div class="pmpd-welcome-account">
+                    <span><?= esc_html( $user->display_name ) ?></span>
+                    <a href="<?= esc_url( wp_logout_url( admin_url( 'admin.php?page=' . self::DASHBOARD_SLUG ) ) ) ?>">Cerrar sesión</a>
+                    <a href="<?= esc_url( admin_url( 'plugins.php' ) ) ?>" title="Volver al admin clásico de WordPress">⚙</a>
+                </div>
+            </div>
 
             <!-- Cabecera de página -->
             <div class="pmpd-page-header">
