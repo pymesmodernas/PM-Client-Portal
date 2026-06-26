@@ -61,9 +61,10 @@ class PMP_Admin {
         exit;
     }
 
-    /** Oculta la barra superior negra de WordPress únicamente en el panel Resumen */
+    /** Oculta la barra superior negra de WordPress en el panel Resumen y en Mi Portal */
     public function maybe_hide_admin_bar( bool $show ): bool {
-        if ( isset( $_GET['page'] ) && $_GET['page'] === self::DASHBOARD_SLUG ) {
+        $page = $_GET['page'] ?? '';
+        if ( $page === self::DASHBOARD_SLUG || $page === self::MENU_SLUG ) {
             return false;
         }
         return $show;
@@ -182,8 +183,12 @@ class PMP_Admin {
      * ───────────────────────────────────────────────────────────────────────── */
 
     public function register_menus() {
-        // Logo de Pymes Modernas (recoloreado a blanco para el menú oscuro de WP)
-        $icon = PMP_PLUGIN_URL . 'assets/img/pymesmodernas-icon.svg';
+        // Logo de Pymes Modernas — embebido en base64 (igual que producto-rapido-pymesmodernas)
+        // para evitar que el servidor sirva el .svg con un MIME type incorrecto.
+        $icon_path = PMP_PLUGIN_DIR . 'assets/img/pymesmodernas-icon.svg';
+        $icon      = file_exists( $icon_path )
+            ? 'data:image/svg+xml;base64,' . base64_encode( file_get_contents( $icon_path ) )
+            : 'dashicons-chart-bar';
 
         // Menú principal → renderiza el portal
         add_menu_page(
@@ -193,7 +198,7 @@ class PMP_Admin {
             self::MENU_SLUG,
             [ $this, 'page_portal'     ],
             $icon,
-            58                          // posición: debajo de WooCommerce (55)
+            3                           // posición: arriba de Entradas (5)
         );
 
         // Submenú: renombrar el primero (WP lo duplica automáticamente)
@@ -1012,6 +1017,22 @@ class PMP_Admin {
         $hour         = (int) current_time( 'H' );
         $greeting     = $hour < 12 ? 'Buenos días' : ( $hour < 19 ? 'Buenas tardes' : 'Buenas noches' );
         $today_str    = date_i18n( 'l j \d\e F' );
+
+        // Resumen de la semana (lunes → hoy)
+        $today      = current_time( 'Y-m-d' );
+        $day_num    = (int) current_time( 'N' ); // 1=lun … 7=dom
+        $week_start = date( 'Y-m-d', strtotime( "{$today} -" . ( $day_num - 1 ) . ' days' ) );
+
+        $week_rev      = PMP_WooCommerce::get_revenue_stats( $week_start, $today );
+        $week_currency = function_exists( 'get_woocommerce_currency_symbol' )
+            ? html_entity_decode( get_woocommerce_currency_symbol() )
+            : '$';
+
+        $week_sessions = null;
+        if ( PMP_GA4::is_configured() ) {
+            $ga4_week      = ( new PMP_GA4() )->get_summary( $week_start, $today );
+            $week_sessions = $ga4_week['overview']['sessions'] ?? null;
+        }
         ?>
         <div class="wrap pmpd-wrap" id="pmpd-dashboard">
 
@@ -1026,6 +1047,30 @@ class PMP_Admin {
                     <span><?= esc_html( $user->display_name ) ?></span>
                     <a href="<?= esc_url( wp_logout_url( admin_url( 'admin.php?page=' . self::DASHBOARD_SLUG ) ) ) ?>">Cerrar sesión</a>
                     <a href="<?= esc_url( admin_url( 'plugins.php' ) ) ?>" title="Volver al admin clásico de WordPress">⚙</a>
+                </div>
+            </div>
+
+            <!-- Resumen rápido de la semana (lunes → hoy) -->
+            <div class="pmpd-week-row">
+                <div class="pmpd-week-card">
+                    <span class="pmpd-week-icon">📦</span>
+                    <span class="pmpd-week-value"><?= (int) ( $week_rev['total_orders'] ?? 0 ) ?></span>
+                    <span class="pmpd-week-label">Pedidos esta semana</span>
+                </div>
+                <div class="pmpd-week-card">
+                    <span class="pmpd-week-icon">💰</span>
+                    <span class="pmpd-week-value"><?= esc_html( $week_currency ) ?><?= number_format( (float) ( $week_rev['net_revenue'] ?? 0 ), 2 ) ?></span>
+                    <span class="pmpd-week-label">Ingresos esta semana</span>
+                </div>
+                <div class="pmpd-week-card">
+                    <span class="pmpd-week-icon">🛍️</span>
+                    <span class="pmpd-week-value"><?= (int) ( $week_rev['items_sold'] ?? 0 ) ?></span>
+                    <span class="pmpd-week-label">Artículos vendidos</span>
+                </div>
+                <div class="pmpd-week-card">
+                    <span class="pmpd-week-icon">👥</span>
+                    <span class="pmpd-week-value"><?= $week_sessions !== null ? number_format( $week_sessions ) : '—' ?></span>
+                    <span class="pmpd-week-label">Usuarios esta semana<?= $week_sessions === null ? ' (requiere GA4)' : '' ?></span>
                 </div>
             </div>
 
