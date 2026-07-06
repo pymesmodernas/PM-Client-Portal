@@ -47,6 +47,8 @@ class PMP_Admin {
         add_action( 'wp_ajax_pmp_test_klaviyo',         [ $this, 'ajax_test_klaviyo'         ] );
         add_action( 'wp_ajax_pmp_dismiss_connect_notice', [ $this, 'ajax_dismiss_connect_notice' ] );
         add_action( 'wp_ajax_pmp_send_digest_now',        [ $this, 'ajax_send_digest_now'        ] );
+        add_action( 'wp_ajax_pmp_content_ideas',          [ $this, 'ajax_content_ideas'          ] );
+        add_action( 'wp_ajax_pmp_generate_post',          [ $this, 'ajax_generate_post'          ] );
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1067,6 +1069,215 @@ class PMP_Admin {
             : wp_send_json_error(   [ 'message' => $result['message'] ] );
     }
 
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Ideas de contenido basadas en datos (GSC + WooCommerce)
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_content_ideas(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        $ideas     = [];
+        $date_to   = date( 'Y-m-d' );
+        $date_from = date( 'Y-m-d', strtotime( '-30 days' ) );
+
+        // 1. Keywords de GSC con posición 4-20 y más de 50 impresiones → oportunidad SEO
+        if ( PMP_SearchConsole::is_configured() ) {
+            $gsc_to   = date( 'Y-m-d', strtotime( '-3 days' ) );
+            $gsc      = ( new PMP_SearchConsole() )->get_summary( $date_from, $gsc_to );
+            $queries  = $gsc['queries'] ?? [];
+
+            $opportunities = array_filter( $queries, fn( $q ) =>
+                (float) $q['position'] >= 4 && (float) $q['position'] <= 20
+                && (int) $q['impressions'] >= 50
+            );
+            usort( $opportunities, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
+
+            foreach ( array_slice( array_values( $opportunities ), 0, 3 ) as $q ) {
+                $pos = round( (float) $q['position'], 1 );
+                $ideas[] = [
+                    'type'    => 'keyword',
+                    'icon'    => '🔍',
+                    'keyword' => $q['query'],
+                    'title'   => 'Artículo sobre: "' . $q['query'] . '"',
+                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones en Google, posición #' . $pos
+                                 . ' — un artículo optimizado puede subirte a la primera página.',
+                    'tag'     => 'Oportunidad SEO',
+                ];
+            }
+
+            // Keywords con CTR muy bajo (<2%) y muchas impresiones → mejorar contenido existente
+            $low_ctr = array_filter( $queries, fn( $q ) =>
+                (float) $q['ctr'] < 2 && (int) $q['impressions'] >= 200
+                && (float) $q['position'] <= 10
+            );
+            usort( $low_ctr, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
+
+            foreach ( array_slice( array_values( $low_ctr ), 0, 1 ) as $q ) {
+                $ideas[] = [
+                    'type'    => 'improve',
+                    'icon'    => '📈',
+                    'keyword' => $q['query'],
+                    'title'   => 'Mejora el título y meta descripción para: "' . $q['query'] . '"',
+                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones pero solo ' . $q['ctr'] . '% CTR — reescribir el artículo existente con un título más atractivo puede doblar los clics.',
+                    'tag'     => 'Mejora de CTR',
+                ];
+            }
+        }
+
+        // 2. Top productos → guía de comprador
+        if ( PMP_WooCommerce::is_active() ) {
+            $products = PMP_WooCommerce::get_top_products( $date_from, $date_to, 5 );
+
+            foreach ( array_slice( $products, 0, 2 ) as $p ) {
+                $ideas[] = [
+                    'type'    => 'product',
+                    'icon'    => '🛍️',
+                    'keyword' => $p['name'],
+                    'title'   => 'Guía completa: ' . $p['name'],
+                    'reason'  => 'Tu producto más vendido del período (' . $p['total_qty'] . ' unidades). Un artículo informativo mejora el SEO y ayuda a los compradores a decidir.',
+                    'tag'     => 'Producto top',
+                ];
+            }
+        }
+
+        $ideas    = array_slice( $ideas, 0, 5 );
+        $api_key  = defined( 'PMP_ANTHROPIC_KEY' ) ? PMP_ANTHROPIC_KEY : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
+        $ai_ready = ! empty( $api_key );
+
+        wp_send_json_success( [ 'ideas' => $ideas, 'ai_ready' => $ai_ready ] );
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Generar borrador de post con Claude
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_generate_post(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        $api_key = defined( 'PMP_ANTHROPIC_KEY' )
+            ? PMP_ANTHROPIC_KEY
+            : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
+
+        if ( empty( $api_key ) ) {
+            wp_send_json_error( [ 'message' => 'Configura tu API Key de Claude en Configuración.' ] );
+            return;
+        }
+
+        $keyword = sanitize_text_field( wp_unslash( $_POST['keyword'] ?? '' ) );
+        $type    = sanitize_text_field( wp_unslash( $_POST['type']    ?? 'keyword' ) );
+        $title   = sanitize_text_field( wp_unslash( $_POST['title']   ?? '' ) );
+
+        if ( empty( $keyword ) ) {
+            wp_send_json_error( [ 'message' => 'Falta el tema del post.' ] );
+            return;
+        }
+
+        $site_name = get_bloginfo( 'name' );
+
+        if ( $type === 'product' ) {
+            $prompt = "Eres redactor de contenido para ecommerce. Escribe un artículo de blog para la tienda \"{$site_name}\" sobre el producto \"{$keyword}\".\n\n"
+                . "Reglas:\n"
+                . "- Primera línea OBLIGATORIA: TÍTULO: [título SEO atractivo del artículo]\n"
+                . "- Introducción que resuelva un problema real del comprador\n"
+                . "- 3-4 secciones con <h2>\n"
+                . "- Beneficios concretos, casos de uso, por qué comprarlo\n"
+                . "- Conclusión con llamada a la acción (comprar)\n"
+                . "- ~900 palabras en HTML para WordPress (<h2>, <p>, <strong>, <ul>, <li>)\n"
+                . "- NO incluyas <html>, <head>, <body> ni <h1>\n"
+                . "Español de Costa Rica. Tono cercano y profesional.";
+        } elseif ( $type === 'improve' ) {
+            $prompt = "Eres redactor de contenido SEO. Escribe un artículo de blog mejorado para la tienda \"{$site_name}\" con la keyword principal: \"{$keyword}\".\n\n"
+                . "Reglas:\n"
+                . "- Primera línea OBLIGATORIA: TÍTULO: [título muy atractivo con la keyword]\n"
+                . "- Enfócate en responder la intención de búsqueda exacta de quien googlea \"{$keyword}\"\n"
+                . "- 3-4 secciones con <h2> y subtítulos con variaciones de la keyword\n"
+                . "- Contenido práctico, incluye listas y negritas para facilitar el escaneo\n"
+                . "- Conclusión con CTA\n"
+                . "- ~900 palabras en HTML para WordPress (<h2>, <p>, <strong>, <ul>, <li>)\n"
+                . "- NO incluyas <html>, <head>, <body> ni <h1>\n"
+                . "Español de Costa Rica. Tono directo y útil.";
+        } else {
+            $prompt = "Eres redactor de contenido SEO. Escribe un artículo de blog para la tienda \"{$site_name}\" optimizado para: \"{$keyword}\".\n\n"
+                . "Reglas:\n"
+                . "- Primera línea OBLIGATORIA: TÍTULO: [título con la keyword]\n"
+                . "- Introducción que enganche y responda la intención de búsqueda\n"
+                . "- 3-4 secciones con <h2> que incluyan variaciones de la keyword\n"
+                . "- Información práctica y útil, sin relleno\n"
+                . "- Conclusión con CTA hacia la tienda\n"
+                . "- ~900 palabras en HTML para WordPress (<h2>, <p>, <strong>, <ul>, <li>)\n"
+                . "- NO incluyas <html>, <head>, <body> ni <h1>\n"
+                . "- NO menciones que está SEO-optimizado\n"
+                . "Español de Costa Rica. Tono cercano y profesional.";
+        }
+
+        $response = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
+            'timeout' => 90,
+            'headers' => [
+                'x-api-key'         => $api_key,
+                'anthropic-version' => '2023-06-01',
+                'content-type'      => 'application/json',
+            ],
+            'body' => wp_json_encode( [
+                'model'      => 'claude-haiku-4-5',
+                'max_tokens' => 2500,
+                'messages'   => [ [ 'role' => 'user', 'content' => $prompt ] ],
+            ] ),
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( [ 'message' => 'Error de red: ' . $response->get_error_message() ] );
+            return;
+        }
+
+        $code   = (int) wp_remote_retrieve_response_code( $response );
+        $body   = json_decode( wp_remote_retrieve_body( $response ), true );
+        $text   = trim( $body['content'][0]['text'] ?? '' );
+
+        if ( $code !== 200 || empty( $text ) ) {
+            $err = $body['error']['message'] ?? "HTTP {$code}";
+            wp_send_json_error( [ 'message' => "Error de Claude: {$err}" ] );
+            return;
+        }
+
+        // Extraer título de la primera línea: "TÍTULO: ..."
+        $post_title = $title ?: $keyword;
+        if ( preg_match( '/^T[IÍ]TULO:\s*(.+)/mu', $text, $m ) ) {
+            $post_title = trim( $m[1] );
+            $text       = trim( preg_replace( '/^T[IÍ]TULO:\s*.+\n?/mu', '', $text, 1 ) );
+        }
+
+        // Crear borrador en WordPress
+        $post_id = wp_insert_post( [
+            'post_title'   => wp_strip_all_tags( $post_title ),
+            'post_content' => $text,
+            'post_status'  => 'draft',
+            'post_type'    => 'post',
+            'post_author'  => get_current_user_id(),
+        ] );
+
+        if ( is_wp_error( $post_id ) ) {
+            wp_send_json_error( [ 'message' => 'No se pudo crear el borrador: ' . $post_id->get_error_message() ] );
+            return;
+        }
+
+        // Pre-rellenar focus keyword en Yoast SEO si está activo
+        if ( defined( 'WPSEO_VERSION' ) || class_exists( 'WPSEO_Meta' ) ) {
+            update_post_meta( $post_id, '_yoast_wpseo_focuskw', $keyword );
+        }
+
+        wp_send_json_success( [
+            'post_id'  => $post_id,
+            'title'    => $post_title,
+            'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
+        ] );
+    }
+
     /* ═════════════════════════════════════════════════════════════════════════
      * SUBPÁGINA: RESUMEN (Dashboard de ecommerce)
      * ═════════════════════════════════════════════════════════════════════════ */
@@ -1362,6 +1573,23 @@ class PMP_Admin {
                         <h2 class="pmpd-card-title">Productos sin ventas <span class="pmpd-badge-warn">+6 meses</span></h2>
                     </div>
                     <div id="pmpd-dormant-list" class="pmpd-list"></div>
+                </div>
+            </div>
+
+            <!-- Ideas de contenido con IA -->
+            <div class="pmpd-card pmpd-card-full" id="pmpd-content-section">
+                <div class="pmpd-card-header">
+                    <h2 class="pmpd-card-title">
+                        ✍️ Ideas de contenido
+                        <span style="font-size:11px;font-weight:normal;color:#9ca3af;margin-left:6px;">basado en tus datos</span>
+                    </h2>
+                    <span id="pmpd-content-badge" class="pmpd-card-badge"></span>
+                </div>
+                <div id="pmpd-content-body" style="min-height:60px;">
+                    <div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px;">
+                        <span class="spinner is-active" style="float:none;display:inline-block;"></span>
+                        <span style="display:block;margin-top:8px;">Analizando tus datos…</span>
+                    </div>
                 </div>
             </div>
 

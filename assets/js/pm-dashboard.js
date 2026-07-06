@@ -1294,6 +1294,129 @@
         });
     }
 
+    /* ─────────────────────────────────────────────────────────────────────────
+     * Ideas de contenido con IA
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    function loadContentIdeas() {
+        $.post(AJAX, { action: 'pmp_content_ideas', nonce: NONCE }, function (r) {
+            if (r && r.success) {
+                renderContentIdeas(r.data);
+            } else {
+                var msg = r && r.data && r.data.message ? r.data.message : 'No hay sugerencias disponibles.';
+                $('#pmpd-content-body').html(
+                    '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' + esc(msg) + '</p>'
+                );
+            }
+        }).fail(function () {
+            $('#pmpd-content-body').html(
+                '<p style="color:#ef4444;font-size:13px;">⚠️ Error al cargar ideas de contenido.</p>'
+            );
+        });
+    }
+
+    function renderContentIdeas(data) {
+        var ideas   = data.ideas    || [];
+        var aiReady = data.ai_ready || false;
+        var $body   = $('#pmpd-content-body');
+
+        if (!ideas.length) {
+            $body.html(
+                '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' +
+                'Sin suficientes datos para sugerir ideas. Conecta Google Search Console o espera a que haya más ventas en el período.</p>'
+            );
+            return;
+        }
+
+        var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;">';
+
+        $.each(ideas, function (_, idea) {
+            var btnHtml;
+            if (aiReady) {
+                btnHtml =
+                    '<button class="button button-primary pmpd-gen-post-btn" ' +
+                    'data-keyword="' + esc(idea.keyword) + '" ' +
+                    'data-type="'    + esc(idea.type)    + '" ' +
+                    'data-title="'   + esc(idea.title)   + '" ' +
+                    'style="width:100%;margin-top:12px;font-size:12px;">✍️ Generar borrador</button>';
+            } else {
+                btnHtml =
+                    '<p style="margin-top:10px;font-size:11px;color:#9ca3af;">' +
+                    '⚙ <a href="' + esc(PMPD.settings_url) + '">Configura tu API Key de Claude</a> para generar posts.</p>';
+            }
+
+            html +=
+                '<div class="pmpd-content-idea-card" style="' +
+                'background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;' +
+                'display:flex;flex-direction:column;">' +
+                '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
+                    '<span style="font-size:16px;">' + esc(idea.icon) + '</span>' +
+                    '<span style="font-size:10px;font-weight:600;color:#60a5fa;text-transform:uppercase;letter-spacing:.4px;">' + esc(idea.tag) + '</span>' +
+                '</div>' +
+                '<div style="font-size:13px;font-weight:600;color:#1a2e4f;line-height:1.4;margin-bottom:6px;">' + esc(idea.title) + '</div>' +
+                '<div style="font-size:12px;color:#6b7280;line-height:1.5;flex:1;">' + esc(idea.reason) + '</div>' +
+                '<div class="pmpd-gen-post-result"></div>' +
+                btnHtml +
+                '</div>';
+        });
+
+        html += '</div>';
+        $body.html(html);
+        $('#pmpd-content-badge').text(ideas.length + (ideas.length === 1 ? ' idea' : ' ideas'));
+    }
+
+    function initContentIdeas() {
+        $(document).on('click', '.pmpd-gen-post-btn', function () {
+            var $btn    = $(this);
+            var $card   = $btn.closest('.pmpd-content-idea-card');
+            var $result = $card.find('.pmpd-gen-post-result');
+            var keyword = $btn.data('keyword');
+            var type    = $btn.data('type');
+            var title   = $btn.data('title');
+
+            $btn.prop('disabled', true).text('Generando…');
+            $result.html(
+                '<p style="font-size:12px;color:#6b7280;margin:8px 0 0;">' +
+                '⏳ Claude está redactando el borrador — puede tardar hasta 30 segundos…</p>'
+            );
+
+            $.ajax({
+                url:     AJAX,
+                method:  'POST',
+                timeout: 100000,
+                data: {
+                    action:  'pmp_generate_post',
+                    nonce:   NONCE,
+                    keyword: keyword,
+                    type:    type,
+                    title:   title,
+                },
+                success: function (r) {
+                    if (r && r.success) {
+                        $result.html(
+                            '<div style="margin-top:10px;padding:10px 12px;background:#f0fdf4;' +
+                            'border:1px solid #bbf7d0;border-radius:8px;">' +
+                            '<div style="font-size:12px;font-weight:600;color:#15803d;margin-bottom:4px;">✅ Borrador creado</div>' +
+                            '<div style="font-size:12px;color:#374151;margin-bottom:8px;">' + esc(r.data.title) + '</div>' +
+                            '<a href="' + r.data.edit_url + '" class="button button-primary" ' +
+                            'style="font-size:12px;" target="_blank" rel="noopener">✏️ Abrir editor →</a>' +
+                            '</div>'
+                        );
+                        $btn.hide();
+                    } else {
+                        var msg = r && r.data && r.data.message ? r.data.message : 'Error al generar el post.';
+                        $result.html('<p style="color:#ef4444;font-size:12px;margin-top:6px;">❌ ' + esc(msg) + '</p>');
+                        $btn.prop('disabled', false).text('✍️ Generar borrador');
+                    }
+                },
+                error: function () {
+                    $result.html('<p style="color:#ef4444;font-size:12px;margin-top:6px;">❌ Error de conexión.</p>');
+                    $btn.prop('disabled', false).text('✍️ Generar borrador');
+                },
+            });
+        });
+    }
+
     /** Fallback de copiado para navegadores sin clipboard API */
     function fallbackCopy(text, callback) {
         var $tmp = $('<textarea>')
@@ -1442,8 +1565,10 @@
         initFilters();
         initTicketModal();
         initAIInsights();
+        initContentIdeas();
         loadDashboard();
         loadDormant();
+        loadContentIdeas();
     });
 
 }(jQuery));
