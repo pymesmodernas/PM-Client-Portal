@@ -46,6 +46,7 @@ class PMP_Admin {
         add_action( 'wp_ajax_pmp_dashboard_klaviyo',    [ $this, 'ajax_dashboard_klaviyo'    ] );
         add_action( 'wp_ajax_pmp_test_klaviyo',         [ $this, 'ajax_test_klaviyo'         ] );
         add_action( 'wp_ajax_pmp_dismiss_connect_notice', [ $this, 'ajax_dismiss_connect_notice' ] );
+        add_action( 'wp_ajax_pmp_send_digest_now',        [ $this, 'ajax_send_digest_now'        ] );
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -662,7 +663,26 @@ class PMP_Admin {
                                    class="regular-text"
                                    value="<?= esc_attr( get_option( 'pmp_digest_email', '' ) ) ?>"
                                    placeholder="michael@pymesmodernas.com">
-                            <p class="description">Deja vacío para desactivar el envío.</p>
+                            <p class="description">Deja vacío para desactivar el envío automático.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Enviar ahora</th>
+                        <td>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <input type="email" id="pmp-digest-manual-email"
+                                       class="regular-text"
+                                       placeholder="Otro email (opcional)"
+                                       style="max-width:240px;">
+                                <button type="button" id="pmp-digest-send-now" class="button">
+                                    📤 Enviar resumen ahora
+                                </button>
+                            </div>
+                            <span id="pmp-digest-send-result" style="display:block;margin-top:6px;font-size:12px;"></span>
+                            <p class="description">
+                                Envía el resumen de la semana anterior al email configurado arriba,
+                                o ingresa otra dirección para enviarlo a un destinatario distinto.
+                            </p>
                         </td>
                     </tr>
                 </table>
@@ -890,6 +910,38 @@ class PMP_Admin {
                     );
                 }
             }
+
+            /* ── Enviar resumen ahora ── */
+            $('#pmp-digest-send-now').on('click', function(){
+                var $btn = $(this);
+                var $res = $('#pmp-digest-send-result');
+                var email = $('#pmp-digest-manual-email').val().trim()
+                         || $('#pmp_digest_email').val().trim();
+
+                if (!email) {
+                    $res.css('color', '#dc2626').text('Ingresa un email destinatario primero.');
+                    return;
+                }
+
+                $btn.prop('disabled', true).text('Enviando…');
+                $res.text('').css('color', '#6b7280');
+
+                $.post(ajaxUrl, {
+                    action: 'pmp_send_digest_now',
+                    nonce:  nonce,
+                    email:  email,
+                }, function(r){
+                    if (r.success) {
+                        $res.css('color', '#16a34a').text('✅ ' + r.data.message);
+                    } else {
+                        $res.css('color', '#dc2626').text('❌ ' + (r.data && r.data.message ? r.data.message : 'Error al enviar.'));
+                    }
+                    $btn.prop('disabled', false).text('📤 Enviar resumen ahora');
+                }).fail(function(){
+                    $res.css('color', '#dc2626').text('❌ Error de conexión. Intenta de nuevo.');
+                    $btn.prop('disabled', false).text('📤 Enviar resumen ahora');
+                });
+            });
         }(jQuery));
         </script>
         <?php
@@ -992,6 +1044,27 @@ class PMP_Admin {
 
     public function ajax_create_portal_page(): void {
         wp_send_json_error( [ 'message' => 'El portal ahora vive en el menú de administración. No es necesaria una página.' ] );
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Enviar resumen semanal manualmente
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_send_digest_now(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        $email = sanitize_email( wp_unslash( $_POST['email'] ?? '' ) );
+        if ( empty( $email ) || ! is_email( $email ) ) {
+            wp_send_json_error( [ 'message' => 'Ingresa un email válido.' ] );
+        }
+
+        $result = PMP_Digest::send_to( $email );
+        $result['ok']
+            ? wp_send_json_success( [ 'message' => $result['message'] ] )
+            : wp_send_json_error(   [ 'message' => $result['message'] ] );
     }
 
     /* ═════════════════════════════════════════════════════════════════════════
