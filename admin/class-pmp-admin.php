@@ -49,6 +49,7 @@ class PMP_Admin {
         add_action( 'wp_ajax_pmp_send_digest_now',        [ $this, 'ajax_send_digest_now'        ] );
         add_action( 'wp_ajax_pmp_content_ideas',          [ $this, 'ajax_content_ideas'          ] );
         add_action( 'wp_ajax_pmp_generate_post',          [ $this, 'ajax_generate_post'          ] );
+        add_action( 'wp_ajax_pmp_generate_social',        [ $this, 'ajax_generate_social'        ] );
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1080,6 +1081,8 @@ class PMP_Admin {
         }
 
         $ideas     = [];
+        $queries   = []; // disponible para ideas de redes sociales también
+        $products  = []; // ídem
         $date_to   = date( 'Y-m-d' );
         $date_from = date( 'Y-m-d', strtotime( '-30 days' ) );
 
@@ -1143,11 +1146,69 @@ class PMP_Admin {
             }
         }
 
-        $ideas    = array_slice( $ideas, 0, 5 );
-        $api_key  = defined( 'PMP_ANTHROPIC_KEY' ) ? PMP_ANTHROPIC_KEY : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
-        $ai_ready = ! empty( $api_key );
+        $ideas = array_slice( $ideas, 0, 5 );
 
-        wp_send_json_success( [ 'ideas' => $ideas, 'ai_ready' => $ai_ready ] );
+        // ── Ideas para redes sociales ──────────────────────────────────────────
+        $social_ideas = [];
+
+        if ( ! empty( $products[0] ) ) {
+            $p = $products[0];
+            $social_ideas[] = [
+                'platform' => 'Instagram · Facebook',
+                'icon'     => '📸',
+                'keyword'  => $p['name'],
+                'title'    => 'Post de producto: ' . $p['name'],
+                'reason'   => number_format( (int) $p['total_qty'] ) . ' unidades vendidas. Un post con imagen, beneficios y link al checkout puede generar ventas directas.',
+                'type'     => 'social_product',
+                'tag'      => 'Post de producto',
+            ];
+
+            $social_ideas[] = [
+                'platform' => 'Reels · TikTok',
+                'icon'     => '🎬',
+                'keyword'  => $p['name'],
+                'title'    => 'Guión de Reel: ' . $p['name'],
+                'reason'   => 'Los videos cortos tienen 3× más alcance orgánico que las fotos. Un reel de 30 segundos sobre este producto puede llegar a nuevos clientes.',
+                'type'     => 'social_reel',
+                'tag'      => 'Guión de video',
+            ];
+        }
+
+        if ( ! empty( $queries[0] ) ) {
+            $q = $queries[0];
+            $social_ideas[] = [
+                'platform' => 'Instagram · LinkedIn',
+                'icon'     => '💡',
+                'keyword'  => $q['query'],
+                'title'    => 'Carrusel educativo: "' . $q['query'] . '"',
+                'reason'   => 'Tu keyword más buscada en Google. Un carrusel de 5 slides sobre este tema atrae al mismo público en redes y posiciona a la marca como referente.',
+                'type'     => 'social_carousel',
+                'tag'      => 'Carrusel educativo',
+            ];
+        }
+
+        if ( ! empty( $products[1] ) ) {
+            $p = $products[1];
+            $social_ideas[] = [
+                'platform' => 'Stories · WhatsApp',
+                'icon'     => '⚡',
+                'keyword'  => $p['name'],
+                'title'    => 'Oferta flash: ' . $p['name'],
+                'reason'   => 'Segundo producto más vendido. Una historia con urgencia (tiempo limitado, stock limitado) activa la decisión de compra inmediata.',
+                'type'     => 'social_story',
+                'tag'      => 'Oferta flash',
+            ];
+        }
+
+        $social_ideas = array_slice( $social_ideas, 0, 4 );
+        $api_key      = defined( 'PMP_ANTHROPIC_KEY' ) ? PMP_ANTHROPIC_KEY : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
+        $ai_ready     = ! empty( $api_key );
+
+        wp_send_json_success( [
+            'ideas'        => $ideas,
+            'social_ideas' => $social_ideas,
+            'ai_ready'     => $ai_ready,
+        ] );
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1276,6 +1337,110 @@ class PMP_Admin {
             'title'    => $post_title,
             'edit_url' => admin_url( 'post.php?post=' . $post_id . '&action=edit' ),
         ] );
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Generar contenido para redes sociales con Claude
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_generate_social(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        $api_key = defined( 'PMP_ANTHROPIC_KEY' )
+            ? PMP_ANTHROPIC_KEY
+            : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
+
+        if ( empty( $api_key ) ) {
+            wp_send_json_error( [ 'message' => 'Configura tu API Key de Claude en Configuración.' ] );
+            return;
+        }
+
+        $keyword  = sanitize_text_field( wp_unslash( $_POST['keyword']  ?? '' ) );
+        $type     = sanitize_text_field( wp_unslash( $_POST['type']     ?? 'social_product' ) );
+        $platform = sanitize_text_field( wp_unslash( $_POST['platform'] ?? '' ) );
+
+        if ( empty( $keyword ) ) {
+            wp_send_json_error( [ 'message' => 'Falta el tema.' ] );
+            return;
+        }
+
+        $site = get_bloginfo( 'name' );
+
+        $prompts = [
+            'social_product' =>
+                "Eres un community manager experto. Escribe un post para Instagram y Facebook de la tienda \"{$site}\" sobre el producto \"{$keyword}\".\n\n"
+                . "Formato:\n"
+                . "📝 CAPTION:\n[Gancho atractivo en primera línea]\n[2-3 párrafos cortos con beneficios y contexto, emojis integrados naturalmente]\n[Llamada a la acción clara]\n\n"
+                . "#️⃣ HASHTAGS:\n[15 hashtags relevantes en español]\n\n"
+                . "Tono: cercano y directo. Sin sonar a publicidad genérica. Máx 200 palabras en el caption.",
+
+            'social_reel' =>
+                "Eres un creador de contenido para redes. Escribe un guión de Reel/TikTok de 30-45 segundos para la tienda \"{$site}\" sobre el producto \"{$keyword}\".\n\n"
+                . "Formato:\n"
+                . "🎬 GANCHO (0-3s):\n[Texto en pantalla + acción del presentador]\n\n"
+                . "📖 DESARROLLO (3-25s):\n[3-4 momentos o escenas mostrando el producto en uso]\n\n"
+                . "🎯 CTA (25-30s):\n[Llamada a la acción + texto de cierre]\n\n"
+                . "📝 CAPTION DEL VIDEO:\n[Texto corto para acompañar el reel]\n\n"
+                . "#️⃣ HASHTAGS:\n[12 hashtags relevantes]\n\n"
+                . "Tono: energético y dinámico. Que enganche en los primeros 3 segundos.",
+
+            'social_carousel' =>
+                "Eres un experto en marketing de contenidos. Crea un carrusel de 5 slides para Instagram/LinkedIn de la tienda \"{$site}\" sobre el tema \"{$keyword}\".\n\n"
+                . "Formato:\n"
+                . "🔥 SLIDE 1 — PORTADA:\n[Título llamativo que genere curiosidad]\n\n"
+                . "💡 SLIDE 2:\n[Problema o pregunta que tiene el lector]\n\n"
+                . "✅ SLIDE 3:\n[Información útil o dato relevante]\n\n"
+                . "🎯 SLIDE 4:\n[Tip práctico o solución]\n\n"
+                . "🔗 SLIDE 5 — CTA:\n[Llamada a la acción + invitación a seguir la cuenta]\n\n"
+                . "📝 CAPTION:\n[Texto para acompañar el carrusel]\n\n"
+                . "#️⃣ HASHTAGS:\n[12 hashtags relevantes]\n\n"
+                . "Tono: educativo y cercano. Que el lector quiera guardarlo.",
+
+            'social_story' =>
+                "Crea el texto para una Historia de Instagram/Story de WhatsApp de la tienda \"{$site}\" promocionando \"{$keyword}\".\n\n"
+                . "Formato:\n"
+                . "📣 TEXTO PRINCIPAL (story/slide 1):\n[Mensaje de oferta con urgencia, emojis, máx 3 líneas]\n\n"
+                . "⏰ TEXTO DE URGENCIA (story/slide 2):\n[Cuenta regresiva o stock limitado, 2 líneas]\n\n"
+                . "🔗 CTA (story/slide 3):\n[Llamada a la acción + swipe up o link en bio]\n\n"
+                . "💬 MENSAJE DE WHATSAPP:\n[Mensaje alternativo para enviar por WA Business, tono directo]\n\n"
+                . "Tono: urgente pero sin presionar. Que genere FOMO natural.",
+        ];
+
+        $prompt = $prompts[ $type ] ?? $prompts['social_product'];
+
+        $response = wp_remote_post( 'https://api.anthropic.com/v1/messages', [
+            'timeout' => 60,
+            'headers' => [
+                'x-api-key'         => $api_key,
+                'anthropic-version' => '2023-06-01',
+                'content-type'      => 'application/json',
+            ],
+            'body' => wp_json_encode( [
+                'model'      => 'claude-haiku-4-5',
+                'max_tokens' => 1000,
+                'messages'   => [ [ 'role' => 'user', 'content' => $prompt ] ],
+            ] ),
+        ] );
+
+        if ( is_wp_error( $response ) ) {
+            wp_send_json_error( [ 'message' => 'Error de red: ' . $response->get_error_message() ] );
+            return;
+        }
+
+        $code = (int) wp_remote_retrieve_response_code( $response );
+        $body = json_decode( wp_remote_retrieve_body( $response ), true );
+        $text = trim( $body['content'][0]['text'] ?? '' );
+
+        if ( $code !== 200 || empty( $text ) ) {
+            $err = $body['error']['message'] ?? "HTTP {$code}";
+            wp_send_json_error( [ 'message' => "Error de Claude: {$err}" ] );
+            return;
+        }
+
+        wp_send_json_success( [ 'content' => $text, 'platform' => $platform ] );
     }
 
     /* ═════════════════════════════════════════════════════════════════════════

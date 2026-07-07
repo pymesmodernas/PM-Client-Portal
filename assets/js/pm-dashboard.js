@@ -1315,12 +1315,54 @@
         });
     }
 
-    function renderContentIdeas(data) {
-        var ideas   = data.ideas    || [];
-        var aiReady = data.ai_ready || false;
-        var $body   = $('#pmpd-content-body');
+    function renderIdeaCard(idea, aiReady, isSocial) {
+        var btnHtml;
+        if (aiReady) {
+            if (isSocial) {
+                btnHtml =
+                    '<button class="button button-primary pmpd-gen-social-btn" ' +
+                    'data-keyword="'  + esc(idea.keyword)  + '" ' +
+                    'data-type="'     + esc(idea.type)     + '" ' +
+                    'data-platform="' + esc(idea.platform) + '" ' +
+                    'style="width:100%;margin-top:12px;font-size:12px;">📱 Generar contenido</button>';
+            } else {
+                btnHtml =
+                    '<button class="button button-primary pmpd-gen-post-btn" ' +
+                    'data-keyword="' + esc(idea.keyword) + '" ' +
+                    'data-type="'    + esc(idea.type)    + '" ' +
+                    'data-title="'   + esc(idea.title)   + '" ' +
+                    'style="width:100%;margin-top:12px;font-size:12px;">✍️ Generar borrador</button>';
+            }
+        } else {
+            btnHtml =
+                '<p style="margin-top:10px;font-size:11px;color:#9ca3af;">' +
+                '⚙ <a href="' + esc(PMPD.settings_url) + '">Configura tu API Key de Claude</a> para generar contenido.</p>';
+        }
 
-        if (!ideas.length) {
+        return (
+            '<div class="pmpd-content-idea-card" style="' +
+            'background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;' +
+            'display:flex;flex-direction:column;">' +
+            '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
+                '<span style="font-size:16px;">' + esc(idea.icon) + '</span>' +
+                '<span style="font-size:10px;font-weight:600;color:#60a5fa;text-transform:uppercase;letter-spacing:.4px;">' + esc(idea.tag) + '</span>' +
+            '</div>' +
+            '<div style="font-size:13px;font-weight:600;color:#1a2e4f;line-height:1.4;margin-bottom:6px;">' + esc(idea.title) + '</div>' +
+            '<div style="font-size:12px;color:#6b7280;line-height:1.5;flex:1;">' + esc(idea.reason) + '</div>' +
+            '<div class="pmpd-gen-result"></div>' +
+            btnHtml +
+            '</div>'
+        );
+    }
+
+    function renderContentIdeas(data) {
+        var ideas        = data.ideas        || [];
+        var socialIdeas  = data.social_ideas || [];
+        var aiReady      = data.ai_ready     || false;
+        var $body        = $('#pmpd-content-body');
+        var totalIdeas   = ideas.length + socialIdeas.length;
+
+        if (!totalIdeas) {
             $body.html(
                 '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' +
                 'Sin suficientes datos para sugerir ideas. Conecta Google Search Console o espera a que haya más ventas en el período.</p>'
@@ -1328,48 +1370,40 @@
             return;
         }
 
-        var html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;">';
+        var html = '';
 
-        $.each(ideas, function (_, idea) {
-            var btnHtml;
-            if (aiReady) {
-                btnHtml =
-                    '<button class="button button-primary pmpd-gen-post-btn" ' +
-                    'data-keyword="' + esc(idea.keyword) + '" ' +
-                    'data-type="'    + esc(idea.type)    + '" ' +
-                    'data-title="'   + esc(idea.title)   + '" ' +
-                    'style="width:100%;margin-top:12px;font-size:12px;">✍️ Generar borrador</button>';
-            } else {
-                btnHtml =
-                    '<p style="margin-top:10px;font-size:11px;color:#9ca3af;">' +
-                    '⚙ <a href="' + esc(PMPD.settings_url) + '">Configura tu API Key de Claude</a> para generar posts.</p>';
-            }
+        if (ideas.length) {
+            html += '<div style="margin-bottom:18px;">';
+            html += '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;' +
+                    'letter-spacing:.6px;margin-bottom:12px;">📝 Blog</div>';
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;">';
+            $.each(ideas, function (_, idea) {
+                html += renderIdeaCard(idea, aiReady, false);
+            });
+            html += '</div></div>';
+        }
 
-            html +=
-                '<div class="pmpd-content-idea-card" style="' +
-                'background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;' +
-                'display:flex;flex-direction:column;">' +
-                '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">' +
-                    '<span style="font-size:16px;">' + esc(idea.icon) + '</span>' +
-                    '<span style="font-size:10px;font-weight:600;color:#60a5fa;text-transform:uppercase;letter-spacing:.4px;">' + esc(idea.tag) + '</span>' +
-                '</div>' +
-                '<div style="font-size:13px;font-weight:600;color:#1a2e4f;line-height:1.4;margin-bottom:6px;">' + esc(idea.title) + '</div>' +
-                '<div style="font-size:12px;color:#6b7280;line-height:1.5;flex:1;">' + esc(idea.reason) + '</div>' +
-                '<div class="pmpd-gen-post-result"></div>' +
-                btnHtml +
-                '</div>';
-        });
+        if (socialIdeas.length) {
+            html += '<div>';
+            html += '<div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;' +
+                    'letter-spacing:.6px;margin-bottom:12px;">📱 Redes Sociales</div>';
+            html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;">';
+            $.each(socialIdeas, function (_, idea) {
+                html += renderIdeaCard(idea, aiReady, true);
+            });
+            html += '</div></div>';
+        }
 
-        html += '</div>';
         $body.html(html);
-        $('#pmpd-content-badge').text(ideas.length + (ideas.length === 1 ? ' idea' : ' ideas'));
+        $('#pmpd-content-badge').text(totalIdeas + (totalIdeas === 1 ? ' idea' : ' ideas'));
     }
 
     function initContentIdeas() {
+        // Blog post generation
         $(document).on('click', '.pmpd-gen-post-btn', function () {
             var $btn    = $(this);
             var $card   = $btn.closest('.pmpd-content-idea-card');
-            var $result = $card.find('.pmpd-gen-post-result');
+            var $result = $card.find('.pmpd-gen-result');
             var keyword = $btn.data('keyword');
             var type    = $btn.data('type');
             var title   = $btn.data('title');
@@ -1414,6 +1448,82 @@
                     $btn.prop('disabled', false).text('✍️ Generar borrador');
                 },
             });
+        });
+
+        // Social content generation
+        $(document).on('click', '.pmpd-gen-social-btn', function () {
+            var $btn      = $(this);
+            var $card     = $btn.closest('.pmpd-content-idea-card');
+            var $result   = $card.find('.pmpd-gen-result');
+            var keyword   = $btn.data('keyword');
+            var type      = $btn.data('type');
+            var platform  = $btn.data('platform');
+
+            $btn.prop('disabled', true).text('Generando…');
+            $result.html(
+                '<p style="font-size:12px;color:#6b7280;margin:8px 0 0;">' +
+                '⏳ Claude está creando el contenido…</p>'
+            );
+
+            $.ajax({
+                url:     AJAX,
+                method:  'POST',
+                timeout: 90000,
+                data: {
+                    action:   'pmp_generate_social',
+                    nonce:    NONCE,
+                    keyword:  keyword,
+                    type:     type,
+                    platform: platform,
+                },
+                success: function (r) {
+                    if (r && r.success) {
+                        var content = r.data.content || '';
+                        var uid     = 'pmpd-social-copy-' + Math.random().toString(36).slice(2);
+                        $result.html(
+                            '<div style="margin-top:10px;">' +
+                            '<div style="font-size:12px;font-weight:600;color:#15803d;margin-bottom:6px;">✅ Contenido generado</div>' +
+                            '<textarea id="' + uid + '" readonly ' +
+                            'style="width:100%;height:180px;font-size:11px;line-height:1.5;' +
+                            'border:1px solid #d1d5db;border-radius:6px;padding:8px;' +
+                            'background:#fff;color:#374151;resize:vertical;">' +
+                            esc(content) + '</textarea>' +
+                            '<button class="button pmpd-copy-social-btn" data-target="' + uid + '" ' +
+                            'style="margin-top:6px;font-size:12px;">📋 Copiar todo</button>' +
+                            '</div>'
+                        );
+                        $btn.hide();
+                    } else {
+                        var msg = r && r.data && r.data.message ? r.data.message : 'Error al generar contenido.';
+                        $result.html('<p style="color:#ef4444;font-size:12px;margin-top:6px;">❌ ' + esc(msg) + '</p>');
+                        $btn.prop('disabled', false).text('📱 Generar contenido');
+                    }
+                },
+                error: function () {
+                    $result.html('<p style="color:#ef4444;font-size:12px;margin-top:6px;">❌ Error de conexión.</p>');
+                    $btn.prop('disabled', false).text('📱 Generar contenido');
+                },
+            });
+        });
+
+        // Copy social content button
+        $(document).on('click', '.pmpd-copy-social-btn', function () {
+            var $btn    = $(this);
+            var target  = $btn.data('target');
+            var text    = $('#' + target).val();
+            var origTxt = $btn.text();
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () {
+                    $btn.text('✅ Copiado');
+                    setTimeout(function () { $btn.text(origTxt); }, 2000);
+                });
+            } else {
+                fallbackCopy(text, function () {
+                    $btn.text('✅ Copiado');
+                    setTimeout(function () { $btn.text(origTxt); }, 2000);
+                });
+            }
         });
     }
 
