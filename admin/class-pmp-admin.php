@@ -1080,79 +1080,180 @@ class PMP_Admin {
             wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
         }
 
-        $ideas     = [];
-        $queries   = []; // disponible para ideas de redes sociales también
-        $products  = []; // ídem
-        $date_to   = date( 'Y-m-d' );
-        $date_from = date( 'Y-m-d', strtotime( '-30 days' ) );
+        $ideas        = [];
+        $queries      = [];
+        $products     = [];
+        $used_queries = []; // evita duplicar keywords entre tipos
+        $date_to      = date( 'Y-m-d' );
+        $date_from    = date( 'Y-m-d', strtotime( '-60 days' ) ); // 60 días para capturar más datos en sitios nuevos
 
-        // 1. Keywords de GSC con posición 4-20 y más de 50 impresiones → oportunidad SEO
+        // ── 1. Google Search Console ──────────────────────────────────────────
         if ( PMP_SearchConsole::is_configured() ) {
-            $gsc_to   = date( 'Y-m-d', strtotime( '-3 days' ) );
-            $gsc      = ( new PMP_SearchConsole() )->get_summary( $date_from, $gsc_to );
-            $queries  = $gsc['queries'] ?? [];
+            $gsc_to  = date( 'Y-m-d', strtotime( '-3 days' ) );
+            $gsc     = ( new PMP_SearchConsole() )->get_summary( $date_from, $gsc_to );
+            $queries = $gsc['queries'] ?? [];
 
-            $opportunities = array_filter( $queries, fn( $q ) =>
+            // A. Oportunidad SEO: posición 4-20, ≥50 impresiones (umbral estándar)
+            $opps = array_filter( $queries, fn( $q ) =>
                 (float) $q['position'] >= 4 && (float) $q['position'] <= 20
                 && (int) $q['impressions'] >= 50
             );
-            usort( $opportunities, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
+            usort( $opps, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
 
-            foreach ( array_slice( array_values( $opportunities ), 0, 3 ) as $q ) {
-                $pos = round( (float) $q['position'], 1 );
-                $ideas[] = [
+            foreach ( array_slice( array_values( $opps ), 0, 3 ) as $q ) {
+                $pos           = round( (float) $q['position'], 1 );
+                $used_queries[] = $q['query'];
+                $ideas[]       = [
                     'type'    => 'keyword',
                     'icon'    => '🔍',
                     'keyword' => $q['query'],
                     'title'   => 'Artículo sobre: "' . $q['query'] . '"',
-                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones en Google, posición #' . $pos
-                                 . ' — un artículo optimizado puede subirte a la primera página.',
+                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones, posición #' . $pos
+                                 . ' — un artículo optimizado puede llevarte a la primera página.',
                     'tag'     => 'Oportunidad SEO',
                 ];
             }
 
-            // Keywords con CTR muy bajo (<2%) y muchas impresiones → mejorar contenido existente
+            // B. Oportunidad sin explotar: posición 4-50, ≥5 impresiones (sitios con poco tráfico)
+            if ( count( $ideas ) < 2 ) {
+                $loose = array_filter( $queries, fn( $q ) =>
+                    (float) $q['position'] >= 4 && (float) $q['position'] <= 50
+                    && (int) $q['impressions'] >= 5
+                    && ! in_array( $q['query'], $used_queries, true )
+                );
+                usort( $loose, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
+
+                foreach ( array_slice( array_values( $loose ), 0, 2 ) as $q ) {
+                    $pos           = round( (float) $q['position'], 1 );
+                    $used_queries[] = $q['query'];
+                    $ideas[]       = [
+                        'type'    => 'keyword',
+                        'icon'    => '🌱',
+                        'keyword' => $q['query'],
+                        'title'   => 'Artículo para posicionar: "' . $q['query'] . '"',
+                        'reason'  => 'Apareces en posición #' . $pos . ' con ' . (int) $q['impressions'] . ' impresiones. Publicar contenido dedicado puede empezar a traer tráfico orgánico constante.',
+                        'tag'     => 'Potencial orgánico',
+                    ];
+                }
+            }
+
+            // C. CTR bajo: posición ≤15, ≥50 impresiones, CTR <4% — umbral más accesible
             $low_ctr = array_filter( $queries, fn( $q ) =>
-                (float) $q['ctr'] < 2 && (int) $q['impressions'] >= 200
-                && (float) $q['position'] <= 10
+                (float) $q['ctr'] < 4 && (int) $q['impressions'] >= 50
+                && (float) $q['position'] <= 15
+                && ! in_array( $q['query'], $used_queries, true )
             );
             usort( $low_ctr, fn( $a, $b ) => (int) $b['impressions'] - (int) $a['impressions'] );
 
             foreach ( array_slice( array_values( $low_ctr ), 0, 1 ) as $q ) {
-                $ideas[] = [
+                $used_queries[] = $q['query'];
+                $ideas[]        = [
                     'type'    => 'improve',
                     'icon'    => '📈',
                     'keyword' => $q['query'],
-                    'title'   => 'Mejora el título y meta descripción para: "' . $q['query'] . '"',
-                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones pero solo ' . $q['ctr'] . '% CTR — reescribir el artículo existente con un título más atractivo puede doblar los clics.',
+                    'title'   => 'Mejora el título para: "' . $q['query'] . '"',
+                    'reason'  => number_format( (int) $q['impressions'] ) . ' impresiones pero solo ' . $q['ctr'] . '% CTR — reescribir el meta título puede doblar los clics sin cambiar la posición.',
                     'tag'     => 'Mejora de CTR',
                 ];
             }
-        }
 
-        // 2. Top productos → guía de comprador
-        if ( PMP_WooCommerce::is_active() ) {
-            $products = PMP_WooCommerce::get_top_products( $date_from, $date_to, 5 );
+            // D. Posición top (1-3) con clics — expandir para mantener liderazgo
+            $strong = array_filter( $queries, fn( $q ) =>
+                (float) $q['position'] <= 3 && (int) $q['clicks'] >= 5
+                && ! in_array( $q['query'], $used_queries, true )
+            );
+            usort( $strong, fn( $a, $b ) => (int) $b['clicks'] - (int) $a['clicks'] );
 
-            foreach ( array_slice( $products, 0, 2 ) as $p ) {
-                $ideas[] = [
-                    'type'    => 'product',
-                    'icon'    => '🛍️',
-                    'keyword' => $p['name'],
-                    'title'   => 'Guía completa: ' . $p['name'],
-                    'reason'  => 'Tu producto más vendido del período (' . $p['total_qty'] . ' unidades). Un artículo informativo mejora el SEO y ayuda a los compradores a decidir.',
-                    'tag'     => 'Producto top',
+            foreach ( array_slice( array_values( $strong ), 0, 1 ) as $q ) {
+                $used_queries[] = $q['query'];
+                $ideas[]        = [
+                    'type'    => 'keyword',
+                    'icon'    => '🏆',
+                    'keyword' => $q['query'],
+                    'title'   => 'Expande el artículo de: "' . $q['query'] . '"',
+                    'reason'  => 'Estás en posición #' . round( (float) $q['position'], 1 ) . ' con ' . number_format( (int) $q['clicks'] ) . ' clics. Agregar más secciones y actualizarlo refuerza tu liderazgo frente a la competencia.',
+                    'tag'     => 'Líder Google',
                 ];
             }
         }
 
-        $ideas = array_slice( $ideas, 0, 5 );
+        // ── 2. WooCommerce — múltiples ángulos por producto ───────────────────
+        if ( PMP_WooCommerce::is_active() ) {
+            $products = PMP_WooCommerce::get_top_products( $date_from, $date_to, 5 );
+            $woo_angles = [
+                [ 'icon' => '🛍️', 'prefix' => 'Guía completa:', 'suffix' => '', 'reason_tpl' => 'Producto más vendido del período (%s unidades). Un artículo informativo mejora el SEO y ayuda a los compradores a decidir.', 'tag' => 'Producto top' ],
+                [ 'icon' => '❓', 'prefix' => 'Preguntas frecuentes sobre:', 'suffix' => '', 'reason_tpl' => 'El segundo producto más vendido (%s unidades). Un artículo de FAQ resuelve dudas, reduce el abandono y mejora el SEO de cola larga.', 'tag' => 'FAQ de producto' ],
+                [ 'icon' => '💡', 'prefix' => 'Cómo usar correctamente:', 'suffix' => '', 'reason_tpl' => 'Vendido %s veces en el período. Un artículo de "cómo usar" posiciona palabras clave de intención informacional y fideliza al cliente post-compra.', 'tag' => 'Guía de uso' ],
+            ];
 
-        // ── Ideas para redes sociales ──────────────────────────────────────────
+            foreach ( array_slice( $products, 0, 3 ) as $idx => $p ) {
+                $angle   = $woo_angles[ $idx ];
+                $ideas[] = [
+                    'type'    => 'product',
+                    'icon'    => $angle['icon'],
+                    'keyword' => $p['name'],
+                    'title'   => $angle['prefix'] . ' ' . $p['name'],
+                    'reason'  => sprintf( $angle['reason_tpl'], number_format( (int) $p['total_qty'] ) ),
+                    'tag'     => $angle['tag'],
+                ];
+            }
+
+            // Artículo comparativa si hay ≥2 productos
+            if ( count( $products ) >= 2 ) {
+                $ideas[] = [
+                    'type'    => 'product',
+                    'icon'    => '⚖️',
+                    'keyword' => $products[0]['name'] . ' vs ' . $products[1]['name'],
+                    'title'   => $products[0]['name'] . ' vs ' . $products[1]['name'] . ': ¿Cuál elegir?',
+                    'reason'  => 'Las comparativas capturan a compradores en la etapa de decisión. Este tipo de artículo tiene alta intención de compra y suele posicionar bien en Google.',
+                    'tag'     => 'Comparativa',
+                ];
+            }
+        }
+
+        // ── 3. Fallback evergreen si hay muy pocas ideas ──────────────────────
+        if ( count( $ideas ) < 3 ) {
+            $site = get_bloginfo( 'name' );
+            $evergreen = [
+                [
+                    'type'    => 'keyword',
+                    'icon'    => '⭐',
+                    'keyword' => 'sobre ' . $site,
+                    'title'   => 'Historia y valores de ' . $site,
+                    'reason'  => 'Las páginas "Sobre nosotros" bien escritas mejoran la confianza del visitante, reducen el rebote y ayudan a Google a entender la autoridad del sitio.',
+                    'tag'     => 'Marca',
+                ],
+                [
+                    'type'    => 'keyword',
+                    'icon'    => '📋',
+                    'keyword' => 'preguntas frecuentes ' . $site,
+                    'title'   => 'Preguntas frecuentes de nuestros clientes',
+                    'reason'  => 'Un artículo de FAQ captura búsquedas de cola larga, mejora el tiempo en sitio y puede aparecer como fragmento destacado en Google.',
+                    'tag'     => 'Evergreen',
+                ],
+                [
+                    'type'    => 'keyword',
+                    'icon'    => '🗺️',
+                    'keyword' => 'consejos ' . $site,
+                    'title'   => '5 consejos para sacarle el máximo provecho a tu compra',
+                    'reason'  => 'El contenido tipo "consejos" tiene alta tasa de compartir y posiciona palabras clave informacionales que atraen visitantes nuevos en etapa temprana de compra.',
+                    'tag'     => 'Evergreen',
+                ],
+            ];
+
+            $needed = 3 - count( $ideas );
+            foreach ( array_slice( $evergreen, 0, $needed ) as $e ) {
+                $ideas[] = $e;
+            }
+        }
+
+        $ideas = array_slice( $ideas, 0, 6 );
+
+        // ── 4. Ideas para redes sociales ──────────────────────────────────────
         $social_ideas = [];
 
         if ( ! empty( $products[0] ) ) {
-            $p = $products[0];
+            $p              = $products[0];
             $social_ideas[] = [
                 'platform' => 'Instagram · Facebook',
                 'icon'     => '📸',
@@ -1172,31 +1273,67 @@ class PMP_Admin {
                 'type'     => 'social_reel',
                 'tag'      => 'Guión de video',
             ];
-        }
-
-        if ( ! empty( $queries[0] ) ) {
-            $q = $queries[0];
+        } else {
+            // Sin ventas: usa el nombre del sitio como tema base
+            $site           = get_bloginfo( 'name' );
             $social_ideas[] = [
-                'platform' => 'Instagram · LinkedIn',
-                'icon'     => '💡',
-                'keyword'  => $q['query'],
-                'title'    => 'Carrusel educativo: "' . $q['query'] . '"',
-                'reason'   => 'Tu keyword más buscada en Google. Un carrusel de 5 slides sobre este tema atrae al mismo público en redes y posiciona a la marca como referente.',
-                'type'     => 'social_carousel',
-                'tag'      => 'Carrusel educativo',
+                'platform' => 'Instagram · Facebook',
+                'icon'     => '📸',
+                'keyword'  => $site,
+                'title'    => 'Presenta tu marca: ' . $site,
+                'reason'   => 'Un post de presentación que cuente qué hace tu negocio y por qué elegirte es el primer contenido que toda marca debe publicar.',
+                'type'     => 'social_product',
+                'tag'      => 'Post de marca',
+            ];
+
+            $social_ideas[] = [
+                'platform' => 'Reels · TikTok',
+                'icon'     => '🎬',
+                'keyword'  => $site,
+                'title'    => 'Reel de presentación: ' . $site,
+                'reason'   => 'Un video corto contando la historia de tu negocio genera conexión emocional y aumenta los seguidores orgánicamente.',
+                'type'     => 'social_reel',
+                'tag'      => 'Guión de video',
             ];
         }
 
+        // Carrusel basado en keyword o en marca
+        $carousel_kw = ! empty( $queries[0]['query'] ) ? $queries[0]['query'] : get_bloginfo( 'name' );
+        $carousel_reason = ! empty( $queries[0]['query'] )
+            ? 'Tu keyword más buscada en Google. Un carrusel de 5 slides sobre este tema atrae al mismo público en redes.'
+            : 'Un carrusel educativo sobre tu nicho posiciona a tu marca como referente y genera guardados — la métrica de mayor alcance en Instagram.';
+
+        $social_ideas[] = [
+            'platform' => 'Instagram · LinkedIn',
+            'icon'     => '💡',
+            'keyword'  => $carousel_kw,
+            'title'    => 'Carrusel educativo: "' . $carousel_kw . '"',
+            'reason'   => $carousel_reason,
+            'type'     => 'social_carousel',
+            'tag'      => 'Carrusel educativo',
+        ];
+
+        // Story/oferta flash: product[1] si hay ventas, si no, marca genérica
         if ( ! empty( $products[1] ) ) {
-            $p = $products[1];
+            $p              = $products[1];
             $social_ideas[] = [
                 'platform' => 'Stories · WhatsApp',
                 'icon'     => '⚡',
                 'keyword'  => $p['name'],
                 'title'    => 'Oferta flash: ' . $p['name'],
-                'reason'   => 'Segundo producto más vendido. Una historia con urgencia (tiempo limitado, stock limitado) activa la decisión de compra inmediata.',
+                'reason'   => 'Segundo producto más vendido. Una historia con urgencia activa la decisión de compra inmediata.',
                 'type'     => 'social_story',
                 'tag'      => 'Oferta flash',
+            ];
+        } else {
+            $social_ideas[] = [
+                'platform' => 'Stories · WhatsApp',
+                'icon'     => '⚡',
+                'keyword'  => get_bloginfo( 'name' ),
+                'title'    => 'Story de bienvenida para nuevos seguidores',
+                'reason'   => 'Una historia que explica qué recibirán al seguirte convierte visitantes casuales en seguidores activos.',
+                'type'     => 'social_story',
+                'tag'      => 'Engagement',
             ];
         }
 
