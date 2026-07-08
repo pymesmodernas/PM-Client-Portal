@@ -1298,7 +1298,12 @@
      * Ideas de contenido con IA
      * ───────────────────────────────────────────────────────────────────────── */
 
-    function loadContentIdeas() {
+    function loadContentIdeas(done) {
+        $('#pmpd-content-body').html(
+            '<div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px;">' +
+            '<span class="spinner is-active" style="float:none;display:inline-block;"></span>' +
+            '<span style="display:block;margin-top:8px;">Analizando tus datos…</span></div>'
+        );
         $.post(AJAX, { action: 'pmp_content_ideas', nonce: NONCE }, function (r) {
             if (r && r.success) {
                 renderContentIdeas(r.data);
@@ -1308,36 +1313,44 @@
                     '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' + esc(msg) + '</p>'
                 );
             }
+            if (typeof done === 'function') done();
         }).fail(function () {
             $('#pmpd-content-body').html(
                 '<p style="color:#ef4444;font-size:13px;">⚠️ Error al cargar ideas de contenido.</p>'
             );
+            if (typeof done === 'function') done();
         });
     }
 
     function renderIdeaCard(idea, aiReady, isSocial) {
-        var btnHtml;
+        var mainBtn;
         if (aiReady) {
             if (isSocial) {
-                btnHtml =
+                mainBtn =
                     '<button class="button button-primary pmpd-gen-social-btn" ' +
                     'data-keyword="'  + esc(idea.keyword)  + '" ' +
                     'data-type="'     + esc(idea.type)     + '" ' +
-                    'data-platform="' + esc(idea.platform) + '" ' +
-                    'style="width:100%;margin-top:12px;font-size:12px;">📱 Generar contenido</button>';
+                    'data-platform="' + esc(idea.platform || '') + '" ' +
+                    'style="flex:1;font-size:12px;">📱 Generar contenido</button>';
             } else {
-                btnHtml =
+                mainBtn =
                     '<button class="button button-primary pmpd-gen-post-btn" ' +
                     'data-keyword="' + esc(idea.keyword) + '" ' +
                     'data-type="'    + esc(idea.type)    + '" ' +
                     'data-title="'   + esc(idea.title)   + '" ' +
-                    'style="width:100%;margin-top:12px;font-size:12px;">✍️ Generar borrador</button>';
+                    'style="flex:1;font-size:12px;">✍️ Generar borrador</button>';
             }
         } else {
-            btnHtml =
-                '<p style="margin-top:10px;font-size:11px;color:#9ca3af;">' +
-                '⚙ <a href="' + esc(PMPD.settings_url) + '">Configura tu API Key de Claude</a> para generar contenido.</p>';
+            mainBtn =
+                '<span style="flex:1;font-size:11px;color:#9ca3af;align-self:center;">' +
+                '⚙ <a href="' + esc(PMPD.settings_url) + '">Configura tu API Key</a> para generar.</span>';
         }
+
+        var dismissBtn =
+            '<button class="button pmpd-dismiss-btn" ' +
+            'data-key="' + esc(idea.key || '') + '" ' +
+            'title="Marcar como hecho — no volverá a aparecer" ' +
+            'style="flex-shrink:0;font-size:11px;color:#6b7280;">✓ Hecho</button>';
 
         return (
             '<div class="pmpd-content-idea-card" style="' +
@@ -1350,23 +1363,34 @@
             '<div style="font-size:13px;font-weight:600;color:#1a2e4f;line-height:1.4;margin-bottom:6px;">' + esc(idea.title) + '</div>' +
             '<div style="font-size:12px;color:#6b7280;line-height:1.5;flex:1;">' + esc(idea.reason) + '</div>' +
             '<div class="pmpd-gen-result"></div>' +
-            btnHtml +
+            '<div style="display:flex;gap:6px;margin-top:12px;align-items:stretch;">' +
+                mainBtn +
+                dismissBtn +
+            '</div>' +
             '</div>'
         );
     }
 
     function renderContentIdeas(data) {
-        var ideas        = data.ideas        || [];
-        var socialIdeas  = data.social_ideas || [];
-        var aiReady      = data.ai_ready     || false;
-        var $body        = $('#pmpd-content-body');
-        var totalIdeas   = ideas.length + socialIdeas.length;
+        var ideas          = data.ideas          || [];
+        var socialIdeas    = data.social_ideas   || [];
+        var aiReady        = data.ai_ready       || false;
+        var dismissedCount = data.dismissed_count || 0;
+        var $body          = $('#pmpd-content-body');
+        var totalIdeas     = ideas.length + socialIdeas.length;
+
+        // Mostrar u ocultar botón Restablecer según descartadas
+        if (dismissedCount > 0) {
+            $('#pmpd-content-reset').show().text('↩ Restablecer (' + dismissedCount + ')');
+        } else {
+            $('#pmpd-content-reset').hide();
+        }
 
         if (!totalIdeas) {
-            $body.html(
-                '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' +
-                'Sin suficientes datos para sugerir ideas. Conecta Google Search Console o espera a que haya más ventas en el período.</p>'
-            );
+            var emptyMsg = dismissedCount > 0
+                ? 'Todas las ideas han sido marcadas como hechas. Haz clic en "↩ Restablecer" para verlas de nuevo.'
+                : 'Sin suficientes datos para sugerir ideas. Conecta Google Search Console o espera a que haya más ventas en el período.';
+            $body.html('<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' + esc(emptyMsg) + '</p>');
             return;
         }
 
@@ -1524,6 +1548,57 @@
                     setTimeout(function () { $btn.text(origTxt); }, 2000);
                 });
             }
+        });
+
+        // Marcar idea como hecha
+        $(document).on('click', '.pmpd-dismiss-btn', function () {
+            var $btn  = $(this);
+            var key   = $btn.data('key');
+            var $card = $btn.closest('.pmpd-content-idea-card');
+
+            $btn.prop('disabled', true).text('…');
+
+            $.post(AJAX, { action: 'pmp_dismiss_idea', nonce: NONCE, key: key }, function (r) {
+                if (r && r.success) {
+                    $card.css({ transition: 'opacity .3s, transform .3s', opacity: 0, transform: 'scale(.95)' });
+                    setTimeout(function () {
+                        $card.remove();
+                        // Actualizar badge y mostrar Restablecer
+                        var total = $('.pmpd-content-idea-card').length;
+                        $('#pmpd-content-badge').text(total + (total === 1 ? ' idea' : ' ideas'));
+                        var cur = parseInt($('#pmpd-content-reset').text().match(/\d+/) || [0], 10) + 1;
+                        $('#pmpd-content-reset').show().text('↩ Restablecer (' + cur + ')');
+                        // Si no quedan tarjetas, mostrar mensaje
+                        if (!total) {
+                            $('#pmpd-content-body').html(
+                                '<p style="color:#9ca3af;font-size:13px;padding:4px 0;">' +
+                                'Todas las ideas han sido marcadas como hechas. Haz clic en "↩ Restablecer" para verlas de nuevo.</p>'
+                            );
+                        }
+                    }, 320);
+                } else {
+                    $btn.prop('disabled', false).text('✓ Hecho');
+                }
+            }).fail(function () {
+                $btn.prop('disabled', false).text('✓ Hecho');
+            });
+        });
+
+        // Regenerar ideas
+        $('#pmpd-content-reload').on('click', function () {
+            var $btn = $(this);
+            $btn.prop('disabled', true).text('…');
+            loadContentIdeas(function () { $btn.prop('disabled', false).text('🔄 Regenerar'); });
+        });
+
+        // Restablecer ideas descartadas
+        $('#pmpd-content-reset').on('click', function () {
+            var $btn = $(this);
+            $btn.prop('disabled', true).text('…');
+            $.post(AJAX, { action: 'pmp_reset_ideas', nonce: NONCE }, function () {
+                $btn.prop('disabled', false);
+                loadContentIdeas(function () { $btn.prop('disabled', false); });
+            });
         });
     }
 

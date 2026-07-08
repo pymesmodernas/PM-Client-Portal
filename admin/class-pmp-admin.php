@@ -50,6 +50,8 @@ class PMP_Admin {
         add_action( 'wp_ajax_pmp_content_ideas',          [ $this, 'ajax_content_ideas'          ] );
         add_action( 'wp_ajax_pmp_generate_post',          [ $this, 'ajax_generate_post'          ] );
         add_action( 'wp_ajax_pmp_generate_social',        [ $this, 'ajax_generate_social'        ] );
+        add_action( 'wp_ajax_pmp_dismiss_idea',           [ $this, 'ajax_dismiss_idea'           ] );
+        add_action( 'wp_ajax_pmp_reset_ideas',            [ $this, 'ajax_reset_ideas'            ] );
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1080,6 +1082,7 @@ class PMP_Admin {
             wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
         }
 
+        $dismissed    = json_decode( (string) get_option( 'pmp_dismissed_ideas', '[]' ), true ) ?: [];
         $ideas        = [];
         $queries      = [];
         $products     = [];
@@ -1247,6 +1250,12 @@ class PMP_Admin {
             }
         }
 
+        // Añadir clave única a cada idea y filtrar las descartadas
+        foreach ( $ideas as &$idea ) {
+            $idea['key'] = md5( $idea['type'] . '|' . $idea['keyword'] );
+        }
+        unset( $idea );
+        $ideas = array_values( array_filter( $ideas, fn( $i ) => ! in_array( $i['key'], $dismissed, true ) ) );
         $ideas = array_slice( $ideas, 0, 6 );
 
         // ── 4. Ideas para redes sociales ──────────────────────────────────────
@@ -1337,15 +1346,61 @@ class PMP_Admin {
             ];
         }
 
+        foreach ( $social_ideas as &$si ) {
+            $si['key'] = md5( $si['type'] . '|' . $si['keyword'] );
+        }
+        unset( $si );
+        $social_ideas = array_values( array_filter( $social_ideas, fn( $i ) => ! in_array( $i['key'], $dismissed, true ) ) );
         $social_ideas = array_slice( $social_ideas, 0, 4 );
+
         $api_key      = defined( 'PMP_ANTHROPIC_KEY' ) ? PMP_ANTHROPIC_KEY : trim( (string) get_option( 'pmp_anthropic_key', '' ) );
         $ai_ready     = ! empty( $api_key );
 
         wp_send_json_success( [
-            'ideas'        => $ideas,
-            'social_ideas' => $social_ideas,
-            'ai_ready'     => $ai_ready,
+            'ideas'           => $ideas,
+            'social_ideas'    => $social_ideas,
+            'ai_ready'        => $ai_ready,
+            'dismissed_count' => count( $dismissed ),
         ] );
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Descartar idea de contenido
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_dismiss_idea(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        $key = sanitize_text_field( wp_unslash( $_POST['key'] ?? '' ) );
+        if ( empty( $key ) ) {
+            wp_send_json_error( [ 'message' => 'Falta la clave.' ] );
+            return;
+        }
+
+        $dismissed = json_decode( (string) get_option( 'pmp_dismissed_ideas', '[]' ), true ) ?: [];
+        if ( ! in_array( $key, $dismissed, true ) ) {
+            $dismissed[] = $key;
+            update_option( 'pmp_dismissed_ideas', wp_json_encode( $dismissed ), false );
+        }
+
+        wp_send_json_success();
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+     * AJAX — Restablecer ideas descartadas
+     * ───────────────────────────────────────────────────────────────────────── */
+
+    public function ajax_reset_ideas(): void {
+        if ( ! check_ajax_referer( 'pmp_admin_nonce', 'nonce', false )
+            || ! current_user_can( 'manage_options' ) ) {
+            wp_send_json_error( [ 'message' => 'Sin permiso.' ], 403 );
+        }
+
+        delete_option( 'pmp_dismissed_ideas' );
+        wp_send_json_success();
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -1885,7 +1940,20 @@ class PMP_Admin {
                         ✍️ Ideas de contenido
                         <span style="font-size:11px;font-weight:normal;color:#9ca3af;margin-left:6px;">basado en tus datos</span>
                     </h2>
-                    <span id="pmpd-content-badge" class="pmpd-card-badge"></span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span id="pmpd-content-badge" class="pmpd-card-badge"></span>
+                        <button type="button" id="pmpd-content-reload"
+                                class="button button-small"
+                                style="font-size:11px;line-height:1.6;height:auto;padding:2px 8px;">
+                            🔄 Regenerar
+                        </button>
+                        <button type="button" id="pmpd-content-reset"
+                                class="button button-small"
+                                style="font-size:11px;line-height:1.6;height:auto;padding:2px 8px;display:none;"
+                                title="Volver a mostrar las ideas que marcaste como hechas">
+                            ↩ Restablecer
+                        </button>
+                    </div>
                 </div>
                 <div id="pmpd-content-body" style="min-height:60px;">
                     <div style="text-align:center;padding:20px;color:#9ca3af;font-size:13px;">
