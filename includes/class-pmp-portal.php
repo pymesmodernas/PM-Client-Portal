@@ -61,9 +61,6 @@ class PMP_Portal {
                 <button class="pm-portal-tab" data-tab="news"    role="tab" aria-selected="false">📰 Noticias</button>
                 <button class="pm-portal-tab active" data-tab="credits" role="tab" aria-selected="true">💳 Mis Créditos</button>
                 <button class="pm-portal-tab" data-tab="tickets" role="tab" aria-selected="false">🎫 Mis Tickets</button>
-                <?php if ( $woo_active ): ?>
-                <button class="pm-portal-tab" data-tab="woo"     role="tab" aria-selected="false">📊 Mi Tienda</button>
-                <?php endif; ?>
                 <button class="pm-portal-tab" data-tab="history" role="tab" aria-selected="false">📋 Historial</button>
             </nav>
 
@@ -197,69 +194,6 @@ class PMP_Portal {
                     </div>
                 </div>
             </div>
-
-            <?php if ( $woo_active ): ?>
-            <!-- ── Panel: WooCommerce ── -->
-            <div class="pm-portal-panel" data-panel="woo">
-                <div class="pm-portal-loading" id="pm-woo-loading">
-                    <div class="pm-portal-spinner"></div><span>Cargando datos de tu tienda...</span>
-                </div>
-                <div id="pm-woo-content" style="display:none;">
-
-                    <div class="pm-woo-filters">
-                        <button class="pm-range-btn active" data-range="30">Últimos 30 días</button>
-                        <button class="pm-range-btn" data-range="7">Esta semana</button>
-                        <button class="pm-range-btn" data-range="month">Este mes</button>
-                        <button class="pm-range-btn" data-range="prev_month">Mes anterior</button>
-                        <div class="pm-custom-range">
-                            <input type="date" id="pm-woo-from" class="pm-input pm-input-sm">
-                            <span>—</span>
-                            <input type="date" id="pm-woo-to" class="pm-input pm-input-sm">
-                            <button class="pm-btn pm-btn-secondary" id="pm-woo-custom-btn">Aplicar</button>
-                        </div>
-                    </div>
-
-                    <div class="pm-woo-stats-row">
-                        <div class="pm-stat-card pm-stat-card-large">
-                            <span class="pm-stat-val" id="pm-woo-revenue">—</span>
-                            <span class="pm-stat-lbl">Ingresos netos</span>
-                        </div>
-                        <div class="pm-stat-card pm-stat-card-large">
-                            <span class="pm-stat-val" id="pm-woo-orders">—</span>
-                            <span class="pm-stat-lbl">Pedidos</span>
-                        </div>
-                        <div class="pm-stat-card pm-stat-card-large">
-                            <span class="pm-stat-val" id="pm-woo-items">—</span>
-                            <span class="pm-stat-lbl">Productos vendidos</span>
-                        </div>
-                    </div>
-
-                    <div class="pm-section-block">
-                        <h3 class="pm-section-title">Ventas por día
-                            <span id="pm-chart-range-label" style="font-size:13px;font-weight:400;color:#6b7280;"></span>
-                        </h3>
-                        <div id="pm-woo-chart" class="pm-bar-chart-wrap pm-daily-chart"></div>
-                    </div>
-
-                    <div class="pm-woo-two-col">
-                        <div class="pm-section-block">
-                            <h3 class="pm-section-title">Top productos</h3>
-                            <div id="pm-top-products" class="pm-top-list"></div>
-                        </div>
-                        <div class="pm-section-block">
-                            <h3 class="pm-section-title">Mejores clientes</h3>
-                            <div id="pm-top-customers" class="pm-top-list"></div>
-                        </div>
-                    </div>
-
-                    <div class="pm-section-block">
-                        <h3 class="pm-section-title">Pedidos por estado</h3>
-                        <div id="pm-orders-by-status" class="pm-status-pills"></div>
-                    </div>
-
-                </div>
-            </div>
-            <?php endif; ?>
 
             <!-- ── Panel: Historial ── -->
             <div class="pm-portal-panel" data-panel="history">
