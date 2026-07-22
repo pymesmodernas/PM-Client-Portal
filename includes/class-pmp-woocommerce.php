@@ -121,7 +121,7 @@ class PMP_WooCommerce {
             $rows = $wpdb->get_results( $wpdb->prepare(
                 "SELECT product_id, SUM(product_qty) AS total_qty, SUM(product_net_revenue) AS total_revenue
                  FROM {$lookup}
-                 WHERE DATE(date_created_gmt) BETWEEN %s AND %s
+                 WHERE DATE(date_created) BETWEEN %s AND %s
                  GROUP BY product_id
                  ORDER BY total_qty DESC
                  LIMIT %d",
@@ -459,7 +459,7 @@ class PMP_WooCommerce {
                      FROM {$wpdb->posts} p
                      LEFT JOIN {$lookup} opl
                             ON opl.product_id = p.ID
-                           AND DATE(opl.date_created_gmt) >= %s
+                           AND DATE(opl.date_created) >= %s
                      WHERE p.post_type   = 'product'
                        AND p.post_status = 'publish'
                        AND opl.product_id IS NULL
@@ -472,7 +472,7 @@ class PMP_WooCommerce {
                     $data = [];
                     foreach ( $rows as $r ) {
                         $last_gmt = $wpdb->get_var( $wpdb->prepare(
-                            "SELECT MAX(date_created_gmt) FROM {$lookup} WHERE product_id = %d",
+                            "SELECT MAX(date_created) FROM {$lookup} WHERE product_id = %d",
                             $r->product_id
                         ) );
 
