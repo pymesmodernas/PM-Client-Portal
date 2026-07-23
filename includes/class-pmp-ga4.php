@@ -132,7 +132,7 @@ class PMP_GA4 {
      * @return array              ['overview' => […], 'channels' => […], 'top_pages' => […]]
      */
     public function get_summary( string $date_from, string $date_to ): array {
-        $cache_key = 'pmp_ga4_v2_' . md5( $date_from . '_' . $date_to );
+        $cache_key = 'pmp_ga4_v3_' . md5( $date_from . '_' . $date_to );
         $cached    = get_transient( $cache_key );
         if ( $cached !== false ) return $cached;
 
@@ -145,6 +145,7 @@ class PMP_GA4 {
                 'retention'    => $this->fetch_retention(    $date_from, $date_to ),
                 'events'       => $this->fetch_events(       $date_from, $date_to ),
                 'search_terms' => $this->fetch_search_terms( $date_from, $date_to ),
+                'funnel'       => $this->fetch_ecommerce_funnel( $date_from, $date_to ),
             ];
         } catch ( \RuntimeException $e ) {
             // Si GA4 falla, devolvemos vacío — el análisis de IA continúa sin datos de GA
@@ -330,6 +331,35 @@ class PMP_GA4 {
             'count'       => (int) $row['metricValues'][0]['value'],
             'conversions' => (int) $row['metricValues'][1]['value'],
         ], $data['rows'] );
+    }
+
+    /** Funnel de conversión ecommerce: vistas → carrito → checkout → compra */
+    private function fetch_ecommerce_funnel( string $date_from, string $date_to ): array {
+        try {
+            $data = $this->run_report( [
+                'dateRanges' => [ [ 'startDate' => $date_from, 'endDate' => $date_to ] ],
+                'metrics'    => [
+                    [ 'name' => 'itemsViewed' ],
+                    [ 'name' => 'addToCarts' ],
+                    [ 'name' => 'checkouts' ],
+                    [ 'name' => 'ecommercePurchases' ],
+                    [ 'name' => 'purchaseRevenue' ],
+                ],
+            ] );
+        } catch ( \RuntimeException ) {
+            return [];
+        }
+
+        if ( empty( $data['rows'][0]['metricValues'] ) ) return [];
+
+        $v = $data['rows'][0]['metricValues'];
+        return [
+            'items_viewed' => (int)   $v[0]['value'],
+            'add_to_cart'  => (int)   $v[1]['value'],
+            'checkouts'    => (int)   $v[2]['value'],
+            'purchases'    => (int)   $v[3]['value'],
+            'revenue'      => round( (float) $v[4]['value'], 2 ),
+        ];
     }
 
     /** Términos de búsqueda interna del sitio */

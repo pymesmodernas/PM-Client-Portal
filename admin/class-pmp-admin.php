@@ -2471,6 +2471,40 @@ class PMP_Admin {
                 }
                 $user .= "\n";
             }
+
+            // Funnel de conversión ecommerce
+            if ( ! empty( $ga4_sum['funnel'] ) ) {
+                $fn = $ga4_sum['funnel'];
+                $sessions = $ga4_sum['overview']['sessions'] ?? 0;
+                if ( $fn['add_to_cart'] > 0 || $fn['purchases'] > 0 ) {
+                    $user .= "### Embudo de conversión ecommerce (datos de GA4 via GTM)\n";
+                    if ( $sessions > 0 ) {
+                        $user .= '- Sesiones: ' . number_format( $sessions ) . "\n";
+                    }
+                    if ( $fn['items_viewed'] > 0 ) {
+                        $pct = $sessions > 0 ? round( $fn['items_viewed'] / $sessions * 100 ) : 0;
+                        $user .= '- Vistas de producto (view_item): ' . number_format( $fn['items_viewed'] ) . " ({$pct}% de sesiones)\n";
+                    }
+                    if ( $fn['add_to_cart'] > 0 ) {
+                        $base = $fn['items_viewed'] ?: $sessions;
+                        $pct  = $base > 0 ? round( $fn['add_to_cart'] / $base * 100 ) : 0;
+                        $user .= '- Añadieron al carrito (add_to_cart): ' . number_format( $fn['add_to_cart'] ) . " ({$pct}% del paso anterior)\n";
+                    }
+                    if ( $fn['checkouts'] > 0 ) {
+                        $pct = $fn['add_to_cart'] > 0 ? round( $fn['checkouts'] / $fn['add_to_cart'] * 100 ) : 0;
+                        $user .= '- Iniciaron checkout (begin_checkout): ' . number_format( $fn['checkouts'] ) . " ({$pct}% de quienes pusieron al carrito)\n";
+                    }
+                    if ( $fn['purchases'] > 0 ) {
+                        $base = $fn['checkouts'] ?: $fn['add_to_cart'];
+                        $pct  = $base > 0 ? round( $fn['purchases'] / $base * 100 ) : 0;
+                        $user .= '- Compraron (purchase): ' . number_format( $fn['purchases'] ) . " ({$pct}% de quienes iniciaron checkout)\n";
+                    }
+                    if ( $fn['revenue'] > 0 ) {
+                        $user .= '- Ingresos atribuidos por GA4: $' . number_format( $fn['revenue'], 2 ) . "\n";
+                    }
+                    $user .= "\n";
+                }
+            }
         }
 
         // ── Google Search Console (si está configurado) ──────────────────────

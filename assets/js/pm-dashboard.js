@@ -619,6 +619,7 @@
         var retention    = data.retention    || [];
         var events       = data.events       || [];
         var searchTerms  = data.search_terms || [];
+        var funnel       = data.funnel       || {};
 
         if (!ov.sessions) {
             $body.html('<p class="pmpd-list-empty">Sin datos de Analytics para este período.</p>');
@@ -632,6 +633,79 @@
         var tblStyle = 'width:100%;border-collapse:collapse;font-size:12px;';
         var thStyle  = 'padding:4px 4px 6px;color:#9ca3af;font-weight:500;';
         var tdStyle  = 'padding:6px 4px;color:#374151;';
+
+        // ── Funnel de conversión ecommerce ──
+        var hasFunnel = funnel.add_to_cart > 0 || funnel.purchases > 0;
+        if (hasFunnel) {
+            var fSteps = [];
+            if (ov.sessions)           fSteps.push({ label: 'Sesiones',         count: ov.sessions,          icon: '👥', color: '#3b82f6' });
+            if (funnel.items_viewed)   fSteps.push({ label: 'Vieron producto',   count: funnel.items_viewed,  icon: '👁', color: '#8b5cf6' });
+            if (funnel.add_to_cart)    fSteps.push({ label: 'Al carrito',        count: funnel.add_to_cart,   icon: '🛒', color: '#f59e0b' });
+            if (funnel.checkouts)      fSteps.push({ label: 'Iniciaron pago',    count: funnel.checkouts,     icon: '💳', color: '#f97316' });
+            if (funnel.purchases)      fSteps.push({ label: 'Compraron',         count: funnel.purchases,     icon: '✅', color: '#10b981' });
+
+            // Detectar el mayor cuello de botella para el insight
+            var biggestDrop = { step: '', pct: 0 };
+            for (var si = 1; si < fSteps.length; si++) {
+                var dp = fSteps[si-1].count > 0 ? Math.round((1 - fSteps[si].count / fSteps[si-1].count) * 100) : 0;
+                if (dp > biggestDrop.pct) biggestDrop = { step: fSteps[si].label, from: fSteps[si-1].label, pct: dp };
+            }
+
+            html += '<div style="margin-bottom:24px;">';
+            html += '<h3 style="' + subTitle + '">🛒 Embudo de conversión</h3>';
+            html += '<div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:4px;">';
+
+            $.each(fSteps, function(i, step) {
+                var prevCount = i > 0 ? fSteps[i-1].count : step.count;
+                var convPct   = i > 0 && prevCount > 0 ? Math.round(step.count / prevCount * 100) : 100;
+                var dropPct   = i > 0 ? (100 - convPct) : 0;
+
+                var badgeBg    = convPct >= 50 ? '#d1fae5' : convPct >= 25 ? '#fef3c7' : '#fee2e2';
+                var badgeColor = convPct >= 50 ? '#065f46' : convPct >= 25 ? '#92400e' : '#991b1b';
+
+                html += '<div style="flex:1;min-width:90px;text-align:center;">';
+                html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 6px;height:100%;box-sizing:border-box;">';
+                html += '<div style="font-size:20px;line-height:1;">' + step.icon + '</div>';
+                html += '<div style="font-size:17px;font-weight:800;color:' + step.color + ';margin:6px 0 2px;">' + fmt(step.count) + '</div>';
+                html += '<div style="font-size:10px;color:#6b7280;font-weight:500;line-height:1.3;">' + step.label + '</div>';
+                if (i > 0) {
+                    html += '<div style="background:' + badgeBg + ';color:' + badgeColor + ';border-radius:100px;font-size:10px;font-weight:700;padding:2px 7px;margin-top:6px;display:inline-block;">' + convPct + '%</div>';
+                }
+                html += '</div>';
+                html += '</div>';
+
+                if (i < fSteps.length - 1) {
+                    var nextDrop = fSteps[i+1].count > 0 && step.count > 0
+                        ? Math.round((1 - fSteps[i+1].count / step.count) * 100) : 0;
+                    html += '<div style="flex-shrink:0;width:32px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;">';
+                    html += '<span style="color:#9ca3af;font-size:14px;">→</span>';
+                    if (nextDrop > 0) {
+                        html += '<span style="font-size:9px;color:#ef4444;font-weight:700;">-' + nextDrop + '%</span>';
+                    }
+                    html += '</div>';
+                }
+            });
+
+            html += '</div>';
+
+            // Insight automático: mayor cuello de botella
+            if (biggestDrop.pct > 0) {
+                var insightColor = biggestDrop.pct >= 70 ? '#991b1b' : biggestDrop.pct >= 40 ? '#92400e' : '#1e3a5f';
+                var insightBg    = biggestDrop.pct >= 70 ? '#fff1f2' : biggestDrop.pct >= 40 ? '#fffbeb' : '#eff6ff';
+                html += '<div style="background:' + insightBg + ';border-left:3px solid ' + insightColor + ';border-radius:6px;padding:8px 12px;margin-top:12px;font-size:12px;color:' + insightColor + ';">';
+                html += '⚠️ Mayor cuello de botella: <strong>' + biggestDrop.pct + '%</strong> de los usuarios que llegaron a <em>' + biggestDrop.from + '</em> no continuaron a <em>' + biggestDrop.step + '</em>.';
+                html += '</div>';
+            }
+
+            // Ingresos atribuidos por GA4
+            if (funnel.revenue > 0) {
+                html += '<div style="margin-top:8px;font-size:12px;color:#6b7280;text-align:right;">';
+                html += 'Ingresos atribuidos por GA4: <strong style="color:#10b981;">$' + Number(funnel.revenue).toLocaleString('es', {minimumFractionDigits:2, maximumFractionDigits:2}) + '</strong>';
+                html += '</div>';
+            }
+
+            html += '</div>';
+        }
 
         // ── Mini KPIs ──
         html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">';
