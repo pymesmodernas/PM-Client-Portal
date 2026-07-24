@@ -638,10 +638,10 @@
         var hasFunnel = funnel.add_to_cart > 0 || funnel.purchases > 0;
         if (hasFunnel) {
             var fSteps = [];
-            if (ov.sessions)           fSteps.push({ label: 'Sesiones',         count: ov.sessions,          icon: '👥', color: '#3b82f6' });
-            if (funnel.items_viewed)   fSteps.push({ label: 'Vieron producto',   count: funnel.items_viewed,  icon: '👁', color: '#8b5cf6' });
-            if (funnel.add_to_cart)    fSteps.push({ label: 'Al carrito',        count: funnel.add_to_cart,   icon: '🛒', color: '#f59e0b' });
-            if (funnel.checkouts)      fSteps.push({ label: 'Iniciaron pago',    count: funnel.checkouts,     icon: '💳', color: '#f97316' });
+            if (ov.sessions)           fSteps.push({ label: 'Sesiones',         count: ov.sessions,          icon: '👥', color: '#1a4dfd' });
+            if (funnel.items_viewed)   fSteps.push({ label: 'Vieron producto',   count: funnel.items_viewed,  icon: '👁', color: '#1a4dfd' });
+            if (funnel.add_to_cart)    fSteps.push({ label: 'Al carrito',        count: funnel.add_to_cart,   icon: '🛒', color: '#1a4dfd' });
+            if (funnel.checkouts)      fSteps.push({ label: 'Iniciaron pago',    count: funnel.checkouts,     icon: '💳', color: '#1a4dfd' });
             if (funnel.purchases)      fSteps.push({ label: 'Compraron',         count: funnel.purchases,     icon: '✅', color: '#10b981' });
 
             // Detectar el mayor cuello de botella para el insight
@@ -664,7 +664,7 @@
                 var badgeColor = convPct >= 50 ? '#065f46' : convPct >= 25 ? '#92400e' : '#991b1b';
 
                 html += '<div style="flex:1;min-width:90px;text-align:center;">';
-                html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 6px;height:100%;box-sizing:border-box;">';
+                html += '<div style="background:#edf1ff;border:1px solid #dce5ff;border-radius:10px;padding:12px 6px;height:100%;box-sizing:border-box;">';
                 html += '<div style="font-size:20px;line-height:1;">' + step.icon + '</div>';
                 html += '<div style="font-size:17px;font-weight:800;color:' + step.color + ';margin:6px 0 2px;">' + fmt(step.count) + '</div>';
                 html += '<div style="font-size:10px;color:#6b7280;font-weight:500;line-height:1.3;">' + step.label + '</div>';

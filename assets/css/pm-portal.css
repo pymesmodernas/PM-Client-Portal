@@ -854,6 +854,8 @@
 
     max-width: 1280px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--pmpd-bg);
+    padding-bottom: 24px;
 }
 
 /* ── Banner de bienvenida ── */
@@ -922,15 +924,12 @@
     background: var(--pmpd-card);
     border-radius: var(--pmpd-r);
     padding: 18px 20px 16px;
-    border-top: 3px solid transparent;
+    border: 1px solid var(--pmpd-border);
+    border-top: 3px solid var(--pmpd-blue);
     box-shadow: var(--pmpd-sh);
     transition: transform .15s, box-shadow .15s;
 }
 .pmpd-week-card:hover { transform: translateY(-3px); box-shadow: var(--pmpd-sh-up); }
-.pmpd-week-row > .pmpd-week-card:nth-child(1) { border-top-color: var(--pmpd-blue); }
-.pmpd-week-row > .pmpd-week-card:nth-child(2) { border-top-color: var(--pmpd-green); }
-.pmpd-week-row > .pmpd-week-card:nth-child(3) { border-top-color: var(--pmpd-purple); }
-.pmpd-week-row > .pmpd-week-card:nth-child(4) { border-top-color: var(--pmpd-amber); }
 .pmpd-week-icon  { font-size: 20px; line-height: 1; margin-bottom: 2px; }
 .pmpd-week-value { font-size: 26px; font-weight: 800; color: var(--pmpd-text); line-height: 1.1; }
 .pmpd-week-label { font-size: 11px; color: var(--pmpd-muted); font-weight: 500; letter-spacing: .02em; }
@@ -965,14 +964,14 @@
 }
 .pmpd-range-btns { display: flex; gap: 5px; flex-wrap: wrap; }
 .pmpd-range {
-    background: #f1f5f9;
+    background: #eef2ff;
     border: none;
     border-radius: 100px;
     padding: 5px 14px;
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    color: #475569;
+    color: #3d5a99;
     line-height: 1.5;
     transition: background .12s, color .12s;
 }
@@ -1010,7 +1009,7 @@
 }
 .pmpd-kpi-card {
     background: var(--pmpd-card);
-    border: none;
+    border: 1px solid var(--pmpd-border);
     border-left: 3px solid var(--pmpd-border);
     border-radius: var(--pmpd-r);
     padding: 20px 20px 18px;
@@ -1033,7 +1032,7 @@
 /* ── Cards ── */
 .pmpd-card {
     background: var(--pmpd-card);
-    border: none;
+    border: 1px solid var(--pmpd-border);
     border-radius: var(--pmpd-r);
     padding: 22px 24px 24px;
     margin-bottom: 16px;
@@ -1052,8 +1051,8 @@
 .pmpd-card-badge {
     font-size: 11px;
     font-weight: 600;
-    background: #f1f5f9;
-    border: none;
+    background: #eef2ff;
+    border: 1px solid var(--pmpd-border);
     border-radius: 100px;
     padding: 3px 10px;
     color: var(--pmpd-muted);
@@ -1178,7 +1177,7 @@
     width: 100%; box-sizing: border-box; resize: vertical; font-family: inherit;
     transition: border-color .15s, box-shadow .15s;
 }
-.pmpd-textarea:focus { outline: none; border-color: var(--pmpd-blue); box-shadow: 0 0 0 3px rgba(59,130,246,.14); }
+.pmpd-textarea:focus { outline: none; border-color: var(--pmpd-blue); box-shadow: 0 0 0 3px rgba(26,77,253,.14); }
 .pmpd-form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .pmpd-msg-ok  { color: #059669; }
 .pmpd-msg-err { color: #ef4444; }
