@@ -732,11 +732,11 @@ class PMP_WooCommerce {
      * ───────────────────────────────────────────────────────────────────────── */
 
     private static function resolve_statuses( string $status ): array {
-        $allowed = [ 'wc-completed', 'wc-processing', 'wc-pending', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed' ];
-        if ( $status && in_array( $status, $allowed, true ) ) {
-            return [ $status ];
-        }
-        return [ 'wc-completed', 'wc-processing' ];
+        $all = [ 'wc-completed', 'wc-processing', 'wc-pending', 'wc-on-hold', 'wc-cancelled', 'wc-refunded', 'wc-failed' ];
+        if ( ! $status ) return $all;
+        $parts = array_values( array_filter( array_map( 'trim', explode( ',', $status ) ) ) );
+        $valid = array_values( array_intersect( $parts, $all ) );
+        return $valid ?: $all;
     }
 
     private static function table_exists( string $table ): bool {

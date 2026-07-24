@@ -989,7 +989,38 @@
     background: #f8fafc;
 }
 .pmpd-status-filter { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.pmpd-status-filter label { font-size: 12px; font-weight: 600; color: var(--pmpd-muted); white-space: nowrap; }
+.pmpd-status-filter > label { font-size: 12px; font-weight: 600; color: var(--pmpd-muted); white-space: nowrap; }
+
+.pmpd-status-dd { position: relative; }
+.pmpd-status-btn {
+    display: flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--pmpd-border);
+    border-radius: 8px; padding: 5px 12px;
+    font-size: 12px; font-weight: 500; color: var(--pmpd-text);
+    cursor: pointer; white-space: nowrap;
+    transition: border-color .12s, box-shadow .12s;
+    min-width: 160px; justify-content: space-between;
+}
+.pmpd-status-btn:hover { border-color: var(--pmpd-blue); }
+.pmpd-status-chevron { font-size: 10px; color: var(--pmpd-muted); }
+
+.pmpd-status-menu {
+    display: none; position: absolute; top: calc(100% + 6px); right: 0;
+    background: #fff; border: 1px solid var(--pmpd-border);
+    border-radius: 10px; box-shadow: var(--pmpd-sh-up);
+    padding: 6px 0; min-width: 180px; z-index: 9999;
+}
+.pmpd-status-menu.pmpd-status-open { display: block; }
+.pmpd-status-opt {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 14px; font-size: 12px; font-weight: 500;
+    color: var(--pmpd-text); cursor: pointer;
+    transition: background .1s;
+}
+.pmpd-status-opt:hover { background: var(--pmpd-bg); }
+.pmpd-status-opt input[type="checkbox"] { accent-color: var(--pmpd-blue); width: 14px; height: 14px; cursor: pointer; flex-shrink: 0; }
+.pmpd-status-opt-all { font-weight: 700; }
+.pmpd-status-divider { height: 1px; background: var(--pmpd-border); margin: 4px 0; }
 .pmpd-select {
     border: 1px solid var(--pmpd-border);
     border-radius: 8px;

@@ -1743,16 +1743,25 @@ class PMP_Admin {
                     <button id="pmpd-apply-custom" class="button">Aplicar</button>
                 </div>
                 <div class="pmpd-status-filter">
-                    <label for="pmpd-status">Estado:</label>
-                    <select id="pmpd-status" class="pmpd-select">
-                        <option value="">Todos los estados</option>
-                        <option value="wc-completed">Completado</option>
-                        <option value="wc-processing">Procesando</option>
-                        <option value="wc-pending">Pendiente</option>
-                        <option value="wc-on-hold">En espera</option>
-                        <option value="wc-cancelled">Cancelado</option>
-                        <option value="wc-refunded">Reembolsado</option>
-                    </select>
+                    <label>Estado:</label>
+                    <div class="pmpd-status-dd" id="pmpd-status-dd">
+                        <button type="button" class="pmpd-status-btn" id="pmpd-status-btn">
+                            <span id="pmpd-status-label">Todos los estados</span>
+                            <span class="pmpd-status-chevron">▾</span>
+                        </button>
+                        <div class="pmpd-status-menu" id="pmpd-status-menu">
+                            <label class="pmpd-status-opt pmpd-status-opt-all">
+                                <input type="checkbox" id="pmpd-status-all" checked> Todos los estados
+                            </label>
+                            <div class="pmpd-status-divider"></div>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-completed"> Completado</label>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-processing"> Procesando</label>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-pending"> Pendiente</label>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-on-hold"> En espera</label>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-cancelled"> Cancelado</label>
+                            <label class="pmpd-status-opt"><input type="checkbox" class="pmpd-scb" value="wc-refunded"> Reembolsado</label>
+                        </div>
+                    </div>
                 </div>
                 <span id="pmpd-loading" style="display:none;">
                     <span class="spinner is-active" style="float:none;vertical-align:middle;margin:0 4px 0 0;"></span>

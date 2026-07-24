@@ -3,7 +3,7 @@
  * Plugin Name:  Pymes Modernas — Portal Cliente
  * Plugin URI:   https://pymesmodernas.com
  * Description:  Portal de mantenimiento para clientes de Pymes Modernas. Muestra estado de créditos, tickets y rendimiento de la tienda WooCommerce. Aparece como menú "Pymes Modernas" en el admin de WordPress.
- * Version:      1.6.13
+ * Version:      1.6.14
  * Author:       Pymes Modernas
  * Author URI:   https://pymesmodernas.com
  * Text Domain:  pm-portal
@@ -13,7 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'PMP_VERSION',    '1.6.13' );
+define( 'PMP_VERSION',    '1.6.14' );
 define( 'PMP_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'PMP_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 

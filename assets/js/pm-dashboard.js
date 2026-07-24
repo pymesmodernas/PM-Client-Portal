@@ -11,7 +11,7 @@
     var CUR    = PMPD.currency || '$';
 
     /* ── Estado global ── */
-    var state = { range: '30', from: '', to: '', status: '' };
+    var state = { range: '30', from: '', to: '', statuses: [] };
 
     /* ── Instancias de Chart.js ── */
     var charts = { sales: null, status: null, products: null };
@@ -56,7 +56,7 @@
     function setLoading(show) { $('#pmpd-loading').toggle(show); }
 
     function getParams() {
-        var p = { nonce: NONCE, range: state.range, status: state.status };
+        var p = { nonce: NONCE, range: state.range, status: state.statuses.join(',') };
         if (state.range === 'custom') {
             p.date_from = state.from;
             p.date_to   = state.to;
@@ -1715,9 +1715,48 @@
             loadDashboard();
         });
 
-        // Filtro de estado
-        $(document).on('change', '#pmpd-status', function () {
-            state.status = $(this).val();
+        // Filtro de estado — dropdown con checkboxes
+        var STATUS_LABELS = {
+            'wc-completed': 'Completado', 'wc-processing': 'Procesando',
+            'wc-pending': 'Pendiente',    'wc-on-hold': 'En espera',
+            'wc-cancelled': 'Cancelado',  'wc-refunded': 'Reembolsado',
+        };
+
+        function updateStatusLabel() {
+            var sel = state.statuses;
+            var lbl = sel.length === 0
+                ? 'Todos los estados'
+                : sel.length === 1
+                    ? (STATUS_LABELS[sel[0]] || sel[0])
+                    : sel.length + ' estados';
+            $('#pmpd-status-label').text(lbl);
+        }
+
+        $(document).on('click', '#pmpd-status-btn', function (e) {
+            e.stopPropagation();
+            $('#pmpd-status-menu').toggleClass('pmpd-status-open');
+        });
+
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#pmpd-status-dd').length) {
+                $('#pmpd-status-menu').removeClass('pmpd-status-open');
+            }
+        });
+
+        $(document).on('change', '#pmpd-status-all', function () {
+            if ($(this).prop('checked')) {
+                $('.pmpd-scb').prop('checked', false);
+                state.statuses = [];
+                updateStatusLabel();
+                loadDashboard();
+            }
+        });
+
+        $(document).on('change', '.pmpd-scb', function () {
+            state.statuses = $('.pmpd-scb:checked').map(function () { return this.value; }).get();
+            var allChecked = state.statuses.length === 0;
+            $('#pmpd-status-all').prop('checked', allChecked);
+            updateStatusLabel();
             loadDashboard();
         });
     }
